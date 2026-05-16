@@ -9,5 +9,5 @@
 | 0.3 | Criar CLAUDE.md do projeto | ✅ Concluída |
 | 0.4 | Criar rules específicas | ✅ Concluída |
 | 0.5 | Criar subagentes essenciais | ✅ Concluída |
-| 0.6 | Configurar Obsidian hooks | ⏳ Pendente |
+| 0.6 | Configurar Obsidian hooks | ✅ Concluída |
 | 0.7 | Configurar Claude settings | ⏳ Pendente |
