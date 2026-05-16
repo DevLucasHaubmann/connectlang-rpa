@@ -1,28 +1,45 @@
-# Environment
-.env
-
-# Python
+# ─── Python environment ────────────────────────────────────────────────────────
+.venv/
 __pycache__/
 *.py[cod]
-*.pyo
-.venv/
 dist/
 build/
 *.egg-info/
+.coverage
+htmlcov/
 
-# Playwright
-browser-profile/
+# ─── Test / lint caches ────────────────────────────────────────────────────────
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# ─── Secrets and environment variables ────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ─── Claude local settings (machine-specific, never shared) ──────────────────
+.claude/settings.local.json
+
+# ─── Robot runtime artifacts ──────────────────────────────────────────────────
+browser-profile/*
+!browser-profile/.gitkeep
+logs/*
+!logs/.gitkeep
+screenshots/*
+!screenshots/.gitkeep
+
+# ─── Execution / debug artifacts ──────────────────────────────────────────────
+*.log
+*.tmp
+*.bak
+*.trace
+traces/
+test-results/
 playwright-report/
 
-# Runtime artifacts
-logs/
-screenshots/
-
-# Tools
-.mypy_cache/
-.ruff_cache/
-.pytest_cache/
-
-# IDE
+# ─── OS / editor ──────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
 .idea/
 .vscode/

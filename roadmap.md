@@ -11,3 +11,5 @@
 | 0.5 | Criar subagentes essenciais | ✅ Concluída |
 | 0.6 | Configurar Obsidian hooks | ✅ Concluída |
 | 0.7 | Configurar Claude settings | ✅ Concluída |
+| 0.8 | Configurar ambiente Python com uv | ✅ Concluída |
+| 0.9 | Revisar e fortalecer .gitignore | ✅ Concluída |
