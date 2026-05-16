@@ -1,0 +1,46 @@
+[project]
+name = "connectlang-rpa-bot"
+version = "0.1.0"
+description = "RPA automation bot for the ConnectLang platform using Playwright."
+requires-python = ">=3.12"
+dependencies = [
+    "playwright>=1.59.0",
+    "pydantic-settings>=2.14.1",
+    "structlog>=25.5.0",
+    "tenacity>=9.1.4",
+]
+
+[project.scripts]
+connectlang-rpa = "connectlang_rpa.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/connectlang_rpa"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "PTH"]
+ignore = []
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true
+exclude = ["tests/"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[dependency-groups]
+dev = [
+    "mypy>=2.1.0",
+    "pytest>=9.0.3",
+    "ruff>=0.15.13",
+]
