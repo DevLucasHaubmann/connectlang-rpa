@@ -37,6 +37,9 @@ python_version = "3.12"
 strict = true
 ignore_missing_imports = true
 exclude = ["tests/"]
+show_error_codes = true
+pretty = true
+plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
