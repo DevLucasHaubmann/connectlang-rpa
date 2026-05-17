@@ -186,4 +186,3 @@ def test_process_runner_does_not_import_playwright() -> None:
 
     source = inspect.getsource(pr_module)
     assert "playwright" not in source, "process_runner must not import Playwright."
-

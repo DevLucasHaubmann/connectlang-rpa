@@ -66,3 +66,12 @@ class VocabularyLocators:
     @property
     def submit_button(self) -> Locator:
         return self._page.get_by_role("button", name=_SUBMIT_BUTTON)
+
+    def word_in_list(self, word_text: str) -> Locator:
+        """Return a locator that resolves to the word's visible text in the vocabulary list.
+
+        Uses exact text match on the vocabulary page after navigation. Risk: if the word
+        text also appears in page chrome (header, footer), this may produce a false positive.
+        Scope this locator to a stable list container once the DOM structure is confirmed.
+        """
+        return self._page.get_by_text(word_text, exact=True)

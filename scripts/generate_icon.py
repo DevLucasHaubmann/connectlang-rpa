@@ -10,6 +10,7 @@ Design:
 - Shape: play triangle (▶), representing run/automate
 - Sizes: 256x256, 48x48, 32x32, 16x16
 """
+
 from __future__ import annotations
 
 import struct
@@ -18,7 +19,7 @@ from pathlib import Path
 _OUTPUT = Path(__file__).parent.parent / "assets" / "icon.ico"
 
 # BGRA tuples — Windows BMP stores channels in B, G, R, A order
-_BG = (24, 19, 17, 255)       # #111318
+_BG = (24, 19, 17, 255)  # #111318
 _ACCENT = (96, 69, 233, 255)  # #e94560  (R=233, G=69, B=96 → BGRA = 96,69,233,255)
 
 
@@ -27,10 +28,14 @@ def _sign(x1: int, y1: int, x2: int, y2: int, x3: int, y3: int) -> int:
 
 
 def _in_triangle(
-    px: int, py: int,
-    ax: int, ay: int,
-    bx: int, by: int,
-    cx: int, cy: int,
+    px: int,
+    py: int,
+    ax: int,
+    ay: int,
+    bx: int,
+    by: int,
+    cx: int,
+    cy: int,
 ) -> bool:
     d1 = _sign(px, py, ax, ay, bx, by)
     d2 = _sign(px, py, bx, by, cx, cy)
@@ -46,13 +51,13 @@ def _make_pixels(size: int) -> bytes:
     margin = max(2, int(size * 0.22))
     inner_margin = max(1, int(size * 0.05))
 
-    ax = margin               # left edge (top-left and bottom-left vertices)
+    ax = margin  # left edge (top-left and bottom-left vertices)
     bx = ax
-    cx = size - margin        # right vertex (tip of arrow)
+    cx = size - margin  # right vertex (tip of arrow)
 
-    ay = margin + inner_margin      # top-left vertex
+    ay = margin + inner_margin  # top-left vertex
     by = size - margin - inner_margin  # bottom-left vertex
-    cy = size // 2             # right vertex (vertical center)
+    cy = size // 2  # right vertex (vertical center)
 
     rows: list[int] = []
     for row in range(size - 1, -1, -1):  # BMP rows are bottom-to-top
@@ -75,15 +80,17 @@ def _make_dib(size: int) -> bytes:
 
     header = struct.pack(
         "<IiiHHIIiiII",
-        40,        # biSize: header size
-        size,      # biWidth
+        40,  # biSize: header size
+        size,  # biWidth
         size * 2,  # biHeight: doubled in ICO format (XOR + AND stacked)
-        1,         # biPlanes
-        32,        # biBitCount: 32bpp BGRA
-        0,         # biCompression: BI_RGB (uncompressed)
-        0,         # biSizeImage: can be 0 for BI_RGB
-        0, 0,      # biXPelsPerMeter, biYPelsPerMeter
-        0, 0,      # biClrUsed, biClrImportant
+        1,  # biPlanes
+        32,  # biBitCount: 32bpp BGRA
+        0,  # biCompression: BI_RGB (uncompressed)
+        0,  # biSizeImage: can be 0 for BI_RGB
+        0,
+        0,  # biXPelsPerMeter, biYPelsPerMeter
+        0,
+        0,  # biClrUsed, biClrImportant
     )
     return header + pixels + and_mask
 
@@ -102,12 +109,12 @@ def generate() -> None:
             "<BBBBHHII",
             0 if size == 256 else size,  # bWidth: 0 means 256 in ICO format
             0 if size == 256 else size,  # bHeight: same
-            0,          # bColorCount: 0 for 32bpp (no palette)
-            0,          # bReserved
-            1,          # wPlanes
-            32,         # wBitCount
-            len(dib),   # dwBytesInRes
-            offset,     # dwImageOffset: byte offset from start of file
+            0,  # bColorCount: 0 for 32bpp (no palette)
+            0,  # bReserved
+            1,  # wPlanes
+            32,  # wBitCount
+            len(dib),  # dwBytesInRes
+            offset,  # dwImageOffset: byte offset from start of file
         )
         offset += len(dib)
 

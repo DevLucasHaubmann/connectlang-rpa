@@ -3,8 +3,10 @@ from __future__ import annotations
 from unittest.mock import MagicMock, call, patch
 
 import pytest
+from playwright.sync_api import Error as PlaywrightError
 
 from connectlang_rpa.actions.browser_actions import BrowserActionError
+from connectlang_rpa.exceptions import WordPersistenceError
 from connectlang_rpa.models.word_entry import WordEntry
 from connectlang_rpa.services.vocabulary_service import VocabularyService
 
@@ -469,6 +471,7 @@ class TestAddWord:
         service.trigger_ai_fill = MagicMock(side_effect=_record("trigger_ai_fill"))
         service.wait_for_ai_completion = MagicMock(side_effect=_record("wait_for_ai_completion"))
         service.submit_word = MagicMock(side_effect=_record("submit_word"))
+        service.verify_word_persisted = MagicMock(side_effect=_record("verify_word_persisted"))
 
         service.add_word(entry)
 
@@ -480,8 +483,29 @@ class TestAddWord:
             "trigger_ai_fill",
             "wait_for_ai_completion",
             "submit_word",
+            "verify_word_persisted",
         ]
         service.fill_word_entry.assert_called_once_with(entry)
+        service.verify_word_persisted.assert_called_once_with(entry.text)
+
+    def test_persistence_failure_propagates_without_swallowing(self) -> None:
+        service, _page, _settings = _make_service()
+        entry = WordEntry(text="Haus", entry_type="word")
+
+        service.go_to_vocabulary_page = MagicMock()
+        service.open_new_word_form = MagicMock()
+        service.fill_word_entry = MagicMock()
+        service.select_languages = MagicMock()
+        service.trigger_ai_fill = MagicMock()
+        service.wait_for_ai_completion = MagicMock()
+        service.submit_word = MagicMock()
+        original = WordPersistenceError("Word 'Haus' not found in vocabulary list after submission")
+        service.verify_word_persisted = MagicMock(side_effect=original)
+
+        with pytest.raises(WordPersistenceError) as exc_info:
+            service.add_word(entry)
+
+        assert exc_info.value is original
 
     def test_does_not_open_real_browser(self) -> None:
         page = _make_page()
@@ -498,8 +522,68 @@ class TestAddWord:
         service.trigger_ai_fill = MagicMock()
         service.wait_for_ai_completion = MagicMock()
         service.submit_word = MagicMock()
+        service.verify_word_persisted = MagicMock()
 
         service.add_word(WordEntry(text="Tisch"))
 
         page.launch.assert_not_called()
         page.connect.assert_not_called()
+
+
+class TestVerifyWordPersisted:
+    def test_navigates_to_vocabulary_page_before_checking(self) -> None:
+        service, _page, _settings = _make_service()
+        service.go_to_vocabulary_page = MagicMock()
+        word_locator = MagicMock()
+        service._locators = MagicMock()
+        service._locators.word_in_list.return_value = word_locator
+
+        service.verify_word_persisted("Haus")
+
+        service.go_to_vocabulary_page.assert_called_once()
+
+    def test_uses_word_in_list_locator_with_exact_word_text(self) -> None:
+        service, _page, _settings = _make_service()
+        service.go_to_vocabulary_page = MagicMock()
+        word_locator = MagicMock()
+        service._locators = MagicMock()
+        service._locators.word_in_list.return_value = word_locator
+
+        service.verify_word_persisted("Tisch")
+
+        service._locators.word_in_list.assert_called_once_with("Tisch")
+
+    def test_waits_for_locator_with_configured_timeout(self) -> None:
+        service, _page, settings = _make_service()
+        service.go_to_vocabulary_page = MagicMock()
+        word_locator = MagicMock()
+        service._locators = MagicMock()
+        service._locators.word_in_list.return_value = word_locator
+
+        service.verify_word_persisted("Haus")
+
+        word_locator.wait_for.assert_called_once_with(
+            state="visible",
+            timeout=settings.default_timeout_ms,
+        )
+
+    def test_raises_word_persistence_error_when_locator_times_out(self) -> None:
+        service, _page, _settings = _make_service()
+        service.go_to_vocabulary_page = MagicMock()
+        word_locator = MagicMock()
+        word_locator.wait_for.side_effect = PlaywrightError("Timeout exceeded")
+        service._locators = MagicMock()
+        service._locators.word_in_list.return_value = word_locator
+
+        with pytest.raises(WordPersistenceError, match="Haus"):
+            service.verify_word_persisted("Haus")
+
+    def test_does_not_raise_when_word_found_in_list(self) -> None:
+        service, _page, _settings = _make_service()
+        service.go_to_vocabulary_page = MagicMock()
+        word_locator = MagicMock()
+        word_locator.wait_for.return_value = None
+        service._locators = MagicMock()
+        service._locators.word_in_list.return_value = word_locator
+
+        service.verify_word_persisted("Haus")  # must not raise

@@ -108,21 +108,28 @@ class MainWindow(ctk.CTk):  # type: ignore[misc]  # CTk has no type stubs
 
         self._word_panel = self._build_word_panel()
         self._word_panel.grid(
-            row=1, column=0, sticky="nsew",
+            row=1,
+            column=0,
+            sticky="nsew",
             padx=(theme.PAD_MD, theme.PAD_SM),
             pady=(theme.PAD_SM, theme.PAD_SM),
         )
 
         self._exec_panel = self._build_exec_panel()
         self._exec_panel.grid(
-            row=1, column=1, sticky="nsew",
+            row=1,
+            column=1,
+            sticky="nsew",
             padx=(theme.PAD_SM, theme.PAD_MD),
             pady=(theme.PAD_SM, theme.PAD_SM),
         )
 
         self._log_panel = self._build_log_panel()
         self._log_panel.grid(
-            row=2, column=0, columnspan=2, sticky="ew",
+            row=2,
+            column=0,
+            columnspan=2,
+            sticky="ew",
             padx=theme.PAD_MD,
             pady=(0, theme.PAD_MD),
         )
@@ -148,7 +155,11 @@ class MainWindow(ctk.CTk):  # type: ignore[misc]  # CTk has no type stubs
 
         status_container = ctk.CTkFrame(frame, fg_color="transparent")
         status_container.grid(
-            row=0, column=1, padx=theme.PAD_LG, pady=theme.PAD_SM, sticky="e",
+            row=0,
+            column=1,
+            padx=theme.PAD_LG,
+            pady=theme.PAD_SM,
+            sticky="e",
         )
 
         status_dot = ctk.CTkLabel(
@@ -202,8 +213,11 @@ class MainWindow(ctk.CTk):  # type: ignore[misc]  # CTk has no type stubs
             text_color=theme.TEXT_SECONDARY,
         )
         label.grid(
-            row=0, column=0, padx=theme.PAD_MD,
-            pady=(theme.PAD_MD, theme.PAD_SM), sticky="w",
+            row=0,
+            column=0,
+            padx=theme.PAD_MD,
+            pady=(theme.PAD_MD, theme.PAD_SM),
+            sticky="w",
         )
 
         center = ctk.CTkFrame(frame, fg_color="transparent")
@@ -289,8 +303,11 @@ class MainWindow(ctk.CTk):  # type: ignore[misc]  # CTk has no type stubs
             text_color=theme.TEXT_SECONDARY,
         )
         label.grid(
-            row=0, column=0, padx=theme.PAD_MD,
-            pady=(theme.PAD_SM, theme.PAD_XS), sticky="w",
+            row=0,
+            column=0,
+            padx=theme.PAD_MD,
+            pady=(theme.PAD_SM, theme.PAD_XS),
+            sticky="w",
         )
 
         self._log_box = ctk.CTkTextbox(
@@ -305,7 +322,9 @@ class MainWindow(ctk.CTk):  # type: ignore[misc]  # CTk has no type stubs
             wrap="none",
         )
         self._log_box.grid(
-            row=1, column=0, sticky="nsew",
+            row=1,
+            column=0,
+            sticky="nsew",
             padx=theme.PAD_MD,
             pady=(0, theme.PAD_MD),
         )
@@ -349,14 +368,16 @@ class MainWindow(ctk.CTk):  # type: ignore[misc]  # CTk has no type stubs
         self._btn_run.configure(state="disabled")
         self._word_panel.set_locked(True)
         self._exec_status_label.configure(
-            text="Executando...", text_color=theme.COLOR_PROCESSING,
+            text="Executando...",
+            text_color=theme.COLOR_PROCESSING,
         )
         self._clear_log()
         self.append_log("▶ Robô iniciado.")
 
     def _handle_word_update(self, word: str) -> None:
         self._exec_status_label.configure(
-            text=f"Processando: {word}", text_color=theme.COLOR_PROCESSING,
+            text=f"Processando: {word}",
+            text_color=theme.COLOR_PROCESSING,
         )
 
     def _handle_finished(self, returncode: int) -> None:
@@ -364,13 +385,15 @@ class MainWindow(ctk.CTk):  # type: ignore[misc]  # CTk has no type stubs
         if returncode == 0:
             self.set_state(AppState.SUCCESS)
             self._exec_status_label.configure(
-                text=f"Concluído (código {returncode})", text_color=theme.COLOR_SUCCESS,
+                text=f"Concluído (código {returncode})",
+                text_color=theme.COLOR_SUCCESS,
             )
             self.append_log(f"✔ Execução concluída com sucesso (código {returncode}).")
         else:
             self.set_state(AppState.ERROR)
             self._exec_status_label.configure(
-                text=f"Erro (código {returncode})", text_color=theme.COLOR_ERROR,
+                text=f"Erro (código {returncode})",
+                text_color=theme.COLOR_ERROR,
             )
             self.append_log(f"✘ Execução finalizada com erro (código {returncode}).")
         self._show_summary()
@@ -381,7 +404,8 @@ class MainWindow(ctk.CTk):  # type: ignore[misc]  # CTk has no type stubs
         self._summary.finalize(1)
         self.set_state(AppState.ERROR)
         self._exec_status_label.configure(
-            text="Erro ao iniciar processo", text_color=theme.COLOR_ERROR,
+            text="Erro ao iniciar processo",
+            text_color=theme.COLOR_ERROR,
         )
         self.append_log(f"✘ Falha ao iniciar robô: {exc}")
         self._show_summary()

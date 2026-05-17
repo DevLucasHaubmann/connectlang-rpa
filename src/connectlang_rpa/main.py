@@ -10,7 +10,7 @@ from playwright.sync_api import Page
 
 from connectlang_rpa.config.settings import get_settings
 from connectlang_rpa.core.browser import BrowserManager
-from connectlang_rpa.exceptions import SessionExpiredError
+from connectlang_rpa.exceptions import SessionExpiredError, WordPersistenceError
 from connectlang_rpa.models.word_entry import WordEntry
 from connectlang_rpa.services.vocabulary_service import VocabularyService
 from connectlang_rpa.services.word_loader import load_word_entries
@@ -44,6 +44,17 @@ def _process_word(service: VocabularyService, entry: WordEntry, page: Page) -> W
         service.add_word(entry)
         log.info("word_added_successfully", word=entry.text)
         return WordResult(word=entry.text, success=True)
+    except WordPersistenceError as exc:
+        screenshot = capture_failure_screenshot(page, entry.text)
+        log.error(
+            "word_persistence_failed",
+            word=entry.text,
+            error=str(exc),
+            screenshot_path=str(screenshot) if screenshot else None,
+        )
+        return WordResult(
+            word=entry.text, success=False, error=str(exc), screenshot_path=screenshot
+        )
     except Exception as exc:
         screenshot = capture_failure_screenshot(page, entry.text)
         log.error(

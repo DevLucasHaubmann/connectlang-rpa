@@ -40,8 +40,11 @@ class WordInputPanel(ctk.CTkFrame):  # type: ignore[misc]
             text_color=theme.TEXT_SECONDARY,
         )
         section_label.grid(
-            row=0, column=0, padx=theme.PAD_MD,
-            pady=(theme.PAD_MD, theme.PAD_SM), sticky="w",
+            row=0,
+            column=0,
+            padx=theme.PAD_MD,
+            pady=(theme.PAD_MD, theme.PAD_SM),
+            sticky="w",
         )
 
         self._textbox = ctk.CTkTextbox(
@@ -55,8 +58,11 @@ class WordInputPanel(ctk.CTkFrame):  # type: ignore[misc]
             wrap="none",
         )
         self._textbox.grid(
-            row=1, column=0, sticky="nsew",
-            padx=theme.PAD_MD, pady=(0, theme.PAD_SM),
+            row=1,
+            column=0,
+            sticky="nsew",
+            padx=theme.PAD_MD,
+            pady=(0, theme.PAD_SM),
         )
         self._textbox.bind("<KeyRelease>", self._on_text_change)
 
@@ -67,7 +73,10 @@ class WordInputPanel(ctk.CTkFrame):  # type: ignore[misc]
             text_color=theme.TEXT_SECONDARY,
         )
         self._counter_label.grid(
-            row=2, column=0, padx=theme.PAD_MD, sticky="w",
+            row=2,
+            column=0,
+            padx=theme.PAD_MD,
+            sticky="w",
         )
 
         self._feedback_label = ctk.CTkLabel(
@@ -77,13 +86,20 @@ class WordInputPanel(ctk.CTkFrame):  # type: ignore[misc]
             text_color=theme.TEXT_SECONDARY,
         )
         self._feedback_label.grid(
-            row=3, column=0, padx=theme.PAD_MD, pady=(theme.PAD_XS, 0), sticky="w",
+            row=3,
+            column=0,
+            padx=theme.PAD_MD,
+            pady=(theme.PAD_XS, 0),
+            sticky="w",
         )
 
         btn_frame = ctk.CTkFrame(self, fg_color="transparent")
         btn_frame.grid(
-            row=4, column=0, padx=theme.PAD_MD,
-            pady=(theme.PAD_SM, theme.PAD_MD), sticky="ew",
+            row=4,
+            column=0,
+            padx=theme.PAD_MD,
+            pady=(theme.PAD_SM, theme.PAD_MD),
+            sticky="ew",
         )
         btn_frame.grid_columnconfigure(0, weight=1)
         btn_frame.grid_columnconfigure(1, weight=1)

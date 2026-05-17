@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import structlog
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import Page
 
@@ -12,10 +13,12 @@ from connectlang_rpa.actions.browser_actions import (
     wait_until_hidden,
 )
 from connectlang_rpa.config.settings import Settings
-from connectlang_rpa.exceptions import SessionExpiredError
+from connectlang_rpa.exceptions import SessionExpiredError, WordPersistenceError
 from connectlang_rpa.locators.vocabulary_locators import VocabularyLocators
 from connectlang_rpa.models.word_entry import WordEntry
 from connectlang_rpa.utils.retry import transient_retry
+
+log = structlog.get_logger(__name__)
 
 _LOGIN_URL_PATTERNS = ("login", "auth", "entrar", "signin", "sign-in")
 
@@ -171,6 +174,23 @@ class VocabularyService:
         )
         self.wait_for_submission_completion()
 
+    def verify_word_persisted(self, word_text: str) -> None:
+        """Navigate to the vocabulary page and confirm the word appears in the list.
+
+        Raises WordPersistenceError if the word is not visible within the configured
+        timeout. This is the authoritative persistence check — the form closing is
+        necessary but not sufficient evidence of a successful save.
+        """
+        self.go_to_vocabulary_page()
+        locator = self._locators.word_in_list(word_text)
+        try:
+            locator.wait_for(state="visible", timeout=self._settings.default_timeout_ms)
+        except PlaywrightError as exc:
+            raise WordPersistenceError(
+                f"Word '{word_text}' not found in vocabulary list after submission"
+            ) from exc
+        log.info("word_persistence_confirmed", word=word_text)
+
     def add_word(self, word_entry: WordEntry) -> None:
         self.go_to_vocabulary_page()
         self.open_new_word_form()
@@ -178,4 +198,7 @@ class VocabularyService:
         self.select_languages()
         self.trigger_ai_fill()
         self.wait_for_ai_completion()
+        log.info("word_submit_clicked", word=word_entry.text)
         self.submit_word()
+        log.info("word_submit_feedback_received", word=word_entry.text)
+        self.verify_word_persisted(word_entry.text)
