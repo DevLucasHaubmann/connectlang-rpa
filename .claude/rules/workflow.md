@@ -33,9 +33,9 @@ Follow Conventional Commits:
 Types: `feat`, `fix`, `chore`, `test`, `docs`, `refactor`.
 
 Examples:
-- `feat(enrollment): add batch enrollment service`
-- `fix(locators): correct selector for student name field`
-- `docs(claude): add playwright rules`
+- `feat(vocabulary): add word entry loader`
+- `fix(locators): correct new word button selector`
+- `docs(claude): update rpa workflow rules`
 
 - One logical change per commit.
 - Never bundle unrelated changes into a single commit.

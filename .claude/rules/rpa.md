@@ -2,7 +2,7 @@
 
 ## Error Isolation
 
-- A failure on one item (e.g., a single word or student record) must not stop the entire batch,
+- A failure on one item (e.g., a single word entry) must not stop the entire batch,
   unless the error is critical (session lost, page unresponsive, unrecoverable state).
 - Wrap per-item processing in a try/except that logs and continues to the next item.
 

@@ -35,7 +35,7 @@ ao `src` layout, tipagem estrita, organização modular e baixa complexidade cog
 
 ### Nomenclatura
 
-- Nomes descritivos: `student_name`, não `sn` ou `x`.
+- Nomes descritivos: `word_text`, não `wt` ou `x`.
 - Booleanos e funções que retornam booleano: prefixo `is_`, `has_`, `can_`.
 - Constantes em `UPPER_SNAKE_CASE` apenas no nível de módulo.
 

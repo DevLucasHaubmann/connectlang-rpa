@@ -10,8 +10,10 @@ reference files. You operate one task at a time, touching only the scope request
 
 ## Project Goal
 
-Automate repetitive workflows on the ConnectLang platform using a persistent browser session.
-The bot handles tasks such as enrolling students, updating records, and generating reports —
+Automate vocabulary entry on the ConnectLang platform using a persistent browser session.
+The bot receives a list of words or phrases and, for each item: opens the vocabulary page,
+clicks "Neues Wort", fills in the word/phrase, selects Deutsch as source language and English
+as translation language, triggers AI auto-fill, waits for completion, and saves the entry —
 without requiring human interaction after setup.
 
 ---
@@ -45,7 +47,7 @@ src/
 ```
 
 - `src` layout (package not importable without install/editable).
-- Service Layer: one service per domain flow (e.g., `enrollment_service.py`).
+- Service Layer: one service per domain flow (e.g., `vocabulary_service.py`).
 - Locators are constants or classes, never inlined in service code.
 - `core/` owns the browser lifecycle; services consume a `Page` object.
 - Models are pure data — no business logic inside them.
@@ -114,24 +116,24 @@ src/
 - Spawn a subagent only when the task clearly benefits from specialization or isolation.
 - Typical triggers: code review, test execution, security audit, documentation generation.
 - Do not spawn subagents for simple file edits or single-step tasks.
-- Subagent definitions will be detailed in Task 0.5.
+- Subagent definitions are in `.claude/agents/`.
 
 ---
 
 ## Internal References
 
-These files will be populated in upcoming tasks. Consult them before acting in their domain.
+Consult these files before acting in their domain.
 
 | File | Domain |
 |------|--------|
 | `.claude/rules/python.md` | Python style, type hints, module structure |
-| `.claude/rules/playwright.md` | Selectors, waits, Page Object patterns |
+| `.claude/rules/playwright.md` | Selectors, waits, browser automation flow |
 | `.claude/rules/rpa.md` | Idempotency, retry limits, audit logging |
 | `.claude/rules/testing.md` | pytest structure, fixtures, coverage |
 | `.claude/rules/workflow.md` | Semantic commits, branching, code review |
-| `.claude/agents/` | Specialized subagent definitions (Task 0.5) |
-| `.claude/skills/` | Reusable skill definitions (Task 0.5) |
-| `.claude/hooks/` | Obsidian and event hooks (Task 0.6) |
+| `.claude/agents/` | Specialized subagent definitions |
+| `.claude/skills/` | Reusable skill definitions |
+| `.claude/hooks/` | Obsidian and event hooks |
 
 ---
 

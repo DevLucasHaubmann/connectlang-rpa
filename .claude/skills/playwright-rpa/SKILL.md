@@ -10,7 +10,7 @@ Esta skill é o ponto de entrada para qualquer task que interaja com o browser.
 
 ## Quando usar
 
-- A task envolve navegação no ConnectLang (fluxo de matrícula, atualização de registros, relatórios).
+- A task envolve navegação no ConnectLang (adição de palavras/frases ao vocabulário).
 - É necessário decidir qual locator usar para um elemento da página.
 - A task exige configurar ou validar a sessão persistente do browser.
 - É preciso implementar waits, timeouts ou captura de screenshot de falha.

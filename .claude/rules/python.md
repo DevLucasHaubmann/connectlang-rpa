@@ -8,7 +8,7 @@
 
 ## Naming
 
-- Use descriptive names: `student_name`, not `sn` or `x`.
+- Use descriptive names: `word_text`, not `wt` or `x`.
 - Boolean variables and functions that return booleans must use `is_`, `has_`, or `can_` prefixes.
 - Constants in `UPPER_SNAKE_CASE` at module level only.
 
