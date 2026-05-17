@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import contextlib
+from typing import Any
+
 import structlog
 from playwright.sync_api import Error as PlaywrightError
-from playwright.sync_api import Page
+from playwright.sync_api import Page, Response
 
 from connectlang_rpa.actions.browser_actions import (
     BrowserActionError,
@@ -161,27 +164,110 @@ class VocabularyService:
             timeout_ms=self._settings.default_timeout_ms,
         )
 
-    def submit_word(self) -> None:
+    def _log_form_state_before_submit(self, word_text: str) -> None:
+        """Log the visible state of every required field and the submit button.
+
+        Purely diagnostic — does not raise, does not block submission.
+        """
+        translation_value: str = ""
+        try:
+            t = self._locators.ai_filled_translation
+            translation_value = t.input_value() if t.is_visible() else "<not visible>"
+        except PlaywrightError:
+            translation_value = "<error reading>"
+
+        submit_enabled = False
+        with contextlib.suppress(PlaywrightError):
+            submit_enabled = self._locators.submit_button.is_enabled()
+
+        log.info(
+            "pre_submit_field_state",
+            word=word_text,
+            translation=translation_value,
+            submit_button_enabled=submit_enabled,
+            url=self._page.url,
+        )
+
+    def submit_word(self, word_text: str) -> None:
+        """Click the submit button and wait for the form to close.
+
+        Attaches a temporary response listener to capture mutating HTTP requests
+        made during the submit window. Logs network outcomes for diagnostics;
+        does not raise based on network state alone (UI signal remains authoritative
+        for form-close detection).
+        """
         wait_until_has_value(
             self._locators.ai_filled_translation,
             context="AI generated translation before submit",
             timeout_ms=self._settings.default_timeout_ms,
         )
-        safe_click(
-            self._locators.submit_button,
-            context="submit word button",
-            timeout_ms=self._settings.default_timeout_ms,
-        )
-        self.wait_for_submission_completion()
+        self._log_form_state_before_submit(word_text)
+
+        captured: list[dict[str, Any]] = []
+
+        def _on_response(response: Response) -> None:
+            if response.request.method not in ("POST", "PUT", "PATCH"):
+                return
+            body_excerpt = ""
+            try:
+                body_excerpt = response.text()[:200]
+            except Exception:
+                body_excerpt = "<unreadable>"
+            captured.append(
+                {
+                    "method": response.request.method,
+                    "url": response.url,
+                    "status": response.status,
+                    "body_excerpt": body_excerpt,
+                }
+            )
+
+        self._page.on("response", _on_response)
+        try:
+            safe_click(
+                self._locators.submit_button,
+                context="submit word button",
+                timeout_ms=self._settings.default_timeout_ms,
+            )
+            self.wait_for_submission_completion()
+        finally:
+            self._page.remove_listener("response", _on_response)
+
+        if captured:
+            for r in captured:
+                status = r["status"]
+                event = "submit_network_success" if 200 <= status < 300 else "submit_network_failed"
+                log.info(
+                    event,
+                    method=r["method"],
+                    url=r["url"],
+                    status=status,
+                    body_excerpt=r["body_excerpt"],
+                )
+        else:
+            log.warning(
+                "submit_network_no_request",
+                detail="no mutating request captured during submit",
+            )
 
     def verify_word_persisted(self, word_text: str) -> None:
         """Navigate to the vocabulary page and confirm the word appears in the list.
 
+        Filters using the search box before checking so the result is not affected
+        by pagination. Uses partial match because the platform prepends articles
+        (e.g. "die Rechnung"), so an exact search for the bare stem never resolves.
+
         Raises WordPersistenceError if the word is not visible within the configured
-        timeout. This is the authoritative persistence check — the form closing is
-        necessary but not sufficient evidence of a successful save.
+        timeout.
         """
         self.go_to_vocabulary_page()
+        try:
+            search = self._locators.word_search_input
+            search.wait_for(state="visible", timeout=self._settings.default_timeout_ms)
+            search.fill(word_text)
+        except PlaywrightError:
+            log.warning("word_search_input_unavailable", word=word_text)
+
         locator = self._locators.word_in_list(word_text)
         try:
             locator.wait_for(state="visible", timeout=self._settings.default_timeout_ms)
@@ -199,6 +285,6 @@ class VocabularyService:
         self.trigger_ai_fill()
         self.wait_for_ai_completion()
         log.info("word_submit_clicked", word=word_entry.text)
-        self.submit_word()
+        self.submit_word(word_entry.text)
         log.info("word_submit_feedback_received", word=word_entry.text)
         self.verify_word_persisted(word_entry.text)

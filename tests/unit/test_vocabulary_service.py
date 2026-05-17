@@ -360,7 +360,7 @@ class TestSubmitWord:
             patch("connectlang_rpa.services.vocabulary_service.wait_until_has_value") as mock_wait,
             patch("connectlang_rpa.services.vocabulary_service.safe_click"),
         ):
-            service.submit_word()
+            service.submit_word("Rechnung")
 
         mock_wait.assert_called_once_with(
             translation_locator,
@@ -379,7 +379,7 @@ class TestSubmitWord:
             patch("connectlang_rpa.services.vocabulary_service.wait_until_has_value"),
             patch("connectlang_rpa.services.vocabulary_service.safe_click") as mock_click,
         ):
-            service.submit_word()
+            service.submit_word("Rechnung")
 
         mock_click.assert_called_once_with(
             submit_locator,
@@ -396,7 +396,7 @@ class TestSubmitWord:
             patch("connectlang_rpa.services.vocabulary_service.wait_until_has_value"),
             patch("connectlang_rpa.services.vocabulary_service.safe_click"),
         ):
-            service.submit_word()
+            service.submit_word("Rechnung")
 
         service.wait_for_submission_completion.assert_called_once()
 
@@ -414,7 +414,7 @@ class TestSubmitWord:
             ),
             pytest.raises(BrowserActionError) as exc_info,
         ):
-            service.submit_word()
+            service.submit_word("Rechnung")
 
         assert exc_info.value is original
 
@@ -432,7 +432,7 @@ class TestSubmitWord:
             ),
             pytest.raises(BrowserActionError) as exc_info,
         ):
-            service.submit_word()
+            service.submit_word("Rechnung")
 
         assert exc_info.value is original
 
@@ -449,7 +449,7 @@ class TestSubmitWord:
             patch("connectlang_rpa.services.vocabulary_service.safe_click"),
             pytest.raises(BrowserActionError) as exc_info,
         ):
-            service.submit_word()
+            service.submit_word("Rechnung")
 
         assert exc_info.value is original
 
