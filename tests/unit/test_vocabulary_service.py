@@ -1,7 +1,10 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
+import pytest
+
+from connectlang_rpa.actions.browser_actions import BrowserActionError
 from connectlang_rpa.models.word_entry import WordEntry
 from connectlang_rpa.services.vocabulary_service import VocabularyService
 
@@ -132,7 +135,43 @@ class TestFillWordEntry:
 
 
 class TestSelectLanguages:
-    def test_calls_safe_select_for_both_languages(self) -> None:
+    def test_uses_word_language_setting_for_source(self) -> None:
+        service, page, settings = _make_service()
+        source_locator = MagicMock()
+        service._locators = MagicMock()
+        service._locators.source_language_select = source_locator
+
+        with patch(
+            "connectlang_rpa.services.vocabulary_service.safe_select_combobox"
+        ) as mock_select:
+            service.select_languages()
+
+        mock_select.assert_any_call(
+            source_locator,
+            settings.word_language,
+            context="source language select",
+            timeout_ms=settings.default_timeout_ms,
+        )
+
+    def test_uses_translation_language_setting_for_translation(self) -> None:
+        service, page, settings = _make_service()
+        translation_locator = MagicMock()
+        service._locators = MagicMock()
+        service._locators.translation_language_select = translation_locator
+
+        with patch(
+            "connectlang_rpa.services.vocabulary_service.safe_select_combobox"
+        ) as mock_select:
+            service.select_languages()
+
+        mock_select.assert_any_call(
+            translation_locator,
+            settings.translation_language,
+            context="translation language select",
+            timeout_ms=settings.default_timeout_ms,
+        )
+
+    def test_calls_safe_select_combobox_for_both_fields_in_order(self) -> None:
         service, page, settings = _make_service()
         source_locator = MagicMock()
         translation_locator = MagicMock()
@@ -140,22 +179,58 @@ class TestSelectLanguages:
         service._locators.source_language_select = source_locator
         service._locators.translation_language_select = translation_locator
 
-        with patch("connectlang_rpa.services.vocabulary_service.safe_select") as mock_select:
+        with patch(
+            "connectlang_rpa.services.vocabulary_service.safe_select_combobox"
+        ) as mock_select:
             service.select_languages()
 
         assert mock_select.call_count == 2
-        mock_select.assert_any_call(
-            source_locator,
-            settings.word_language,
-            context="source language select",
-            timeout_ms=settings.default_timeout_ms,
-        )
-        mock_select.assert_any_call(
-            translation_locator,
-            settings.translation_language,
-            context="translation language select",
-            timeout_ms=settings.default_timeout_ms,
-        )
+        assert mock_select.call_args_list == [
+            call(
+                source_locator,
+                settings.word_language,
+                context="source language select",
+                timeout_ms=settings.default_timeout_ms,
+            ),
+            call(
+                translation_locator,
+                settings.translation_language,
+                context="translation language select",
+                timeout_ms=settings.default_timeout_ms,
+            ),
+        ]
+
+    def test_source_language_error_propagates_without_swallowing(self) -> None:
+        service, page, settings = _make_service()
+        service._locators = MagicMock()
+        original = BrowserActionError("Failed to select 'de' on 'source language select'")
+
+        with patch(
+            "connectlang_rpa.services.vocabulary_service.safe_select_combobox",
+            side_effect=original,
+        ):
+            with pytest.raises(BrowserActionError) as exc_info:
+                service.select_languages()
+
+        assert exc_info.value is original
+
+    def test_translation_language_error_propagates_without_swallowing(self) -> None:
+        service, page, settings = _make_service()
+        service._locators = MagicMock()
+        original = BrowserActionError("Failed to select 'en' on 'translation language select'")
+
+        def _raise_on_translation(locator: MagicMock, value: str, **kwargs: object) -> None:
+            if "translation" in kwargs.get("context", ""):
+                raise original
+
+        with patch(
+            "connectlang_rpa.services.vocabulary_service.safe_select_combobox",
+            side_effect=_raise_on_translation,
+        ):
+            with pytest.raises(BrowserActionError) as exc_info:
+                service.select_languages()
+
+        assert exc_info.value is original
 
 
 class TestTriggerAiFill:

@@ -10,6 +10,7 @@ from connectlang_rpa.actions import (
     safe_click,
     safe_fill,
     safe_select,
+    safe_select_combobox,
     wait_until_enabled,
     wait_until_visible,
 )
@@ -164,8 +165,7 @@ def test_safe_select_uses_custom_timeout() -> None:
 def test_safe_select_raises_on_playwright_error() -> None:
     locator = _make_locator()
     locator.select_option.side_effect = PlaywrightError("select failed")
-    expected = "Failed to select option on 'source language select'"
-    with pytest.raises(BrowserActionError, match=expected):
+    with pytest.raises(BrowserActionError, match="source language select"):
         safe_select(locator, "de", "source language select")
 
 
@@ -176,6 +176,70 @@ def test_safe_select_preserves_cause() -> None:
     with pytest.raises(BrowserActionError) as exc_info:
         safe_select(locator, "de", "source language select")
     assert exc_info.value.__cause__ is original
+
+
+# --- safe_select_combobox ---
+
+
+def test_safe_select_combobox_uses_select_option_when_available() -> None:
+    locator = _make_locator()
+    safe_select_combobox(locator, "Deutsch", "source language select")
+    locator.select_option.assert_called_once_with("Deutsch", timeout=10_000)
+
+
+def test_safe_select_combobox_uses_custom_timeout() -> None:
+    locator = _make_locator()
+    safe_select_combobox(locator, "English", "translation language select", timeout_ms=5_000)
+    locator.select_option.assert_called_once_with("English", timeout=5_000)
+
+
+def test_safe_select_combobox_falls_back_to_click_when_select_option_fails() -> None:
+    locator = _make_locator()
+    option_locator = MagicMock()
+    locator.select_option.side_effect = PlaywrightError("not a native select")
+    locator.page.get_by_role.return_value = option_locator
+
+    safe_select_combobox(locator, "Deutsch", "source language select")
+
+    locator.click.assert_called_once()
+    locator.page.get_by_role.assert_called_once_with("option", name="Deutsch")
+    option_locator.click.assert_called_once()
+
+
+def test_safe_select_combobox_raises_with_value_in_message_on_fallback_failure() -> None:
+    locator = _make_locator()
+    locator.select_option.side_effect = PlaywrightError("not a native select")
+    locator.page.get_by_role.return_value.click.side_effect = PlaywrightError("option not found")
+
+    with pytest.raises(BrowserActionError, match="Deutsch"):
+        safe_select_combobox(locator, "Deutsch", "source language select")
+
+
+def test_safe_select_combobox_raises_with_context_in_message_on_fallback_failure() -> None:
+    locator = _make_locator()
+    locator.select_option.side_effect = PlaywrightError("not a native select")
+    locator.page.get_by_role.return_value.click.side_effect = PlaywrightError("option not found")
+
+    with pytest.raises(BrowserActionError, match="source language select"):
+        safe_select_combobox(locator, "Deutsch", "source language select")
+
+
+def test_safe_select_combobox_preserves_cause_on_fallback_failure() -> None:
+    locator = _make_locator()
+    original = PlaywrightError("option not found")
+    locator.select_option.side_effect = PlaywrightError("not a native select")
+    locator.page.get_by_role.return_value.click.side_effect = original
+
+    with pytest.raises(BrowserActionError) as exc_info:
+        safe_select_combobox(locator, "Deutsch", "source language select")
+
+    assert exc_info.value.__cause__ is original
+
+
+def test_safe_select_combobox_does_not_call_click_when_select_option_succeeds() -> None:
+    locator = _make_locator()
+    safe_select_combobox(locator, "English", "translation language select")
+    locator.click.assert_not_called()
 
 
 # --- isolation: no page navigation or flow methods called ---

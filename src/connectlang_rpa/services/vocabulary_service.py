@@ -5,7 +5,7 @@ from playwright.sync_api import Page
 from connectlang_rpa.actions.browser_actions import (
     safe_click,
     safe_fill,
-    safe_select,
+    safe_select_combobox,
     wait_until_visible,
 )
 from connectlang_rpa.config.settings import Settings
@@ -57,13 +57,13 @@ class VocabularyService:
         )
 
     def select_languages(self) -> None:
-        safe_select(
+        safe_select_combobox(
             self._locators.source_language_select,
             self._settings.word_language,
             context="source language select",
             timeout_ms=self._settings.default_timeout_ms,
         )
-        safe_select(
+        safe_select_combobox(
             self._locators.translation_language_select,
             self._settings.translation_language,
             context="translation language select",

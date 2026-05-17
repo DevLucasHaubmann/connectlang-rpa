@@ -21,3 +21,4 @@
 | 3.1 | Mapear locators principais da página de vocabulário | ✅ Concluída |
 | 3.2 | Criar ações primitivas reutilizáveis | ✅ Concluída |
 | 4.1 | Criar VocabularyService | ✅ Concluída |
+| 4.2 | Implementar seleção Deutsch → English | ✅ Concluída |
