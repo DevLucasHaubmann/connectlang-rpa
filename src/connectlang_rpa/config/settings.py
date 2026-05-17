@@ -10,6 +10,7 @@ class Settings(BaseSettings):
 
     target_url: str
     browser_profile_dir: Path
+    words_file: Path
     headless: bool
     default_timeout_ms: int
     action_delay_ms: int
