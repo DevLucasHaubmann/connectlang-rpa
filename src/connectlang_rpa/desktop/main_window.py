@@ -7,6 +7,7 @@ from pathlib import Path
 import customtkinter as ctk
 
 from connectlang_rpa.desktop import theme
+from connectlang_rpa.desktop.services.log_streamer import LogStreamer
 from connectlang_rpa.desktop.services.process_runner import ProcessRunner
 from connectlang_rpa.desktop.widgets.word_input_panel import WordInputPanel
 
@@ -44,6 +45,11 @@ class MainWindow(ctk.CTk):  # type: ignore[misc]  # CTk has no type stubs
         super().__init__()
         self._state = AppState.IDLE
         self._runner: ProcessRunner | None = None
+        self._streamer = LogStreamer(
+            on_line=lambda line: self.after(0, self.append_log, line),
+            on_word_update=lambda word: self.after(0, self._handle_word_update, word),
+            on_progress=lambda c, t: self.after(0, self.set_progress, c, t),
+        )
         self._configure_window()
         self._build_layout()
         self._apply_state(self._state)
@@ -279,12 +285,14 @@ class MainWindow(ctk.CTk):  # type: ignore[misc]  # CTk has no type stubs
     # ------------------------------------------------------------------
 
     def _on_run_clicked(self) -> None:
+        self._streamer.reset()
         self._runner = ProcessRunner(
             command=_BOT_COMMAND,
             cwd=_PROJECT_ROOT,
             on_started=lambda: self.after(0, self._handle_started),
             on_finished=lambda code: self.after(0, self._handle_finished, code),
             on_error=lambda exc: self.after(0, self._handle_error, exc),
+            on_output=self._streamer.process_line,
         )
         with contextlib.suppress(RuntimeError):
             self._runner.start()
@@ -296,7 +304,13 @@ class MainWindow(ctk.CTk):  # type: ignore[misc]  # CTk has no type stubs
         self._exec_status_label.configure(
             text="Executando...", text_color=theme.COLOR_PROCESSING,
         )
+        self._clear_log()
         self.append_log("▶ Robô iniciado.")
+
+    def _handle_word_update(self, word: str) -> None:
+        self._exec_status_label.configure(
+            text=f"Processando: {word}", text_color=theme.COLOR_PROCESSING,
+        )
 
     def _handle_finished(self, returncode: int) -> None:
         if returncode == 0:
@@ -345,6 +359,11 @@ class MainWindow(ctk.CTk):  # type: ignore[misc]  # CTk has no type stubs
         self._log_box.configure(state="normal")
         self._log_box.insert("end", text + "\n")
         self._log_box.see("end")
+        self._log_box.configure(state="disabled")
+
+    def _clear_log(self) -> None:
+        self._log_box.configure(state="normal")
+        self._log_box.delete("1.0", "end")
         self._log_box.configure(state="disabled")
 
     def set_progress(self, current: int, total: int) -> None:
