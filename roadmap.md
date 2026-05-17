@@ -23,3 +23,4 @@
 | 4.1 | Criar VocabularyService | ✅ Concluída |
 | 4.2 | Implementar seleção Deutsch → English | ✅ Concluída |
 | 4.3 | Implementar espera da IA | ✅ Concluída |
+| 4.4 | Implementar submissão final | ✅ Concluída |

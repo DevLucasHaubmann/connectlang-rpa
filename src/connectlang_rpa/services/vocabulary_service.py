@@ -7,6 +7,7 @@ from connectlang_rpa.actions.browser_actions import (
     safe_fill,
     safe_select_combobox,
     wait_until_has_value,
+    wait_until_visible,
 )
 from connectlang_rpa.config.settings import Settings
 from connectlang_rpa.locators.vocabulary_locators import VocabularyLocators
@@ -85,9 +86,19 @@ class VocabularyService:
         )
 
     def submit_word(self) -> None:
+        wait_until_has_value(
+            self._locators.ai_filled_translation,
+            context="AI generated translation before submit",
+            timeout_ms=self._settings.default_timeout_ms,
+        )
         safe_click(
             self._locators.submit_button,
             context="submit word button",
+            timeout_ms=self._settings.default_timeout_ms,
+        )
+        wait_until_visible(
+            self._locators.success_message,
+            context="word submission success message",
             timeout_ms=self._settings.default_timeout_ms,
         )
 
