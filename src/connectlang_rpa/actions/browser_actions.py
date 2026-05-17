@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import re
+
 from playwright.sync_api import Error as PlaywrightError
-from playwright.sync_api import Locator
+from playwright.sync_api import Locator, expect
 
 _DEFAULT_TIMEOUT_MS = 10_000
 
@@ -20,6 +22,26 @@ def wait_until_visible(
         locator.wait_for(state="visible", timeout=timeout)
     except PlaywrightError as exc:
         raise BrowserActionError(f"Timed out waiting for '{context}' to become visible") from exc
+
+
+def wait_until_has_value(
+    locator: Locator,
+    context: str,
+    timeout_ms: int | None = None,
+) -> None:
+    """Wait for a visible textbox to contain a non-empty value.
+
+    Polls via Playwright's expect API, which retries internally until timeout.
+    Raises BrowserActionError if the field remains empty after timeout.
+    """
+    timeout = timeout_ms if timeout_ms is not None else _DEFAULT_TIMEOUT_MS
+    wait_until_visible(locator, context, timeout_ms)
+    try:
+        expect(locator).to_have_value(re.compile(r".+"), timeout=timeout)
+    except AssertionError as exc:
+        raise BrowserActionError(
+            f"'{context}' was visible but remained empty after {timeout}ms"
+        ) from exc
 
 
 def wait_until_enabled(

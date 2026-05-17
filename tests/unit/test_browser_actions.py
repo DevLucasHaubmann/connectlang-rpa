@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from playwright.sync_api import Error as PlaywrightError
@@ -12,6 +12,7 @@ from connectlang_rpa.actions import (
     safe_select,
     safe_select_combobox,
     wait_until_enabled,
+    wait_until_has_value,
     wait_until_visible,
 )
 
@@ -51,6 +52,72 @@ def test_wait_until_visible_preserves_original_cause() -> None:
     with pytest.raises(BrowserActionError) as exc_info:
         wait_until_visible(locator, "test element")
     assert exc_info.value.__cause__ is original
+
+
+# --- wait_until_has_value ---
+
+
+def test_wait_until_has_value_calls_wait_for_visible_first() -> None:
+    locator = _make_locator()
+    with patch("connectlang_rpa.actions.browser_actions.expect") as mock_expect:
+        mock_expect.return_value.to_have_value = MagicMock()
+        wait_until_has_value(locator, "translation field")
+    locator.wait_for.assert_called_once_with(state="visible", timeout=10_000)
+
+
+def test_wait_until_has_value_calls_to_have_value_with_nonempty_pattern() -> None:
+    locator = _make_locator()
+    with patch("connectlang_rpa.actions.browser_actions.expect") as mock_expect:
+        assertion = MagicMock()
+        mock_expect.return_value = assertion
+        wait_until_has_value(locator, "translation field", timeout_ms=5_000)
+    mock_expect.assert_called_once_with(locator)
+    assertion.to_have_value.assert_called_once()
+    args, kwargs = assertion.to_have_value.call_args
+    assert kwargs.get("timeout") == 5_000
+
+
+def test_wait_until_has_value_uses_default_timeout() -> None:
+    locator = _make_locator()
+    with patch("connectlang_rpa.actions.browser_actions.expect") as mock_expect:
+        assertion = MagicMock()
+        mock_expect.return_value = assertion
+        wait_until_has_value(locator, "translation field")
+    _, kwargs = assertion.to_have_value.call_args
+    assert kwargs.get("timeout") == 10_000
+
+
+def test_wait_until_has_value_raises_browser_action_error_when_field_empty() -> None:
+    locator = _make_locator()
+    with patch("connectlang_rpa.actions.browser_actions.expect") as mock_expect:
+        mock_expect.return_value.to_have_value.side_effect = AssertionError("value empty")
+        with pytest.raises(BrowserActionError, match="remained empty"):
+            wait_until_has_value(locator, "AI generated translation")
+
+
+def test_wait_until_has_value_includes_context_in_error_message() -> None:
+    locator = _make_locator()
+    with patch("connectlang_rpa.actions.browser_actions.expect") as mock_expect:
+        mock_expect.return_value.to_have_value.side_effect = AssertionError("value empty")
+        with pytest.raises(BrowserActionError, match="AI generated translation"):
+            wait_until_has_value(locator, "AI generated translation")
+
+
+def test_wait_until_has_value_preserves_original_cause() -> None:
+    locator = _make_locator()
+    original = AssertionError("value empty")
+    with patch("connectlang_rpa.actions.browser_actions.expect") as mock_expect:
+        mock_expect.return_value.to_have_value.side_effect = original
+        with pytest.raises(BrowserActionError) as exc_info:
+            wait_until_has_value(locator, "translation field")
+    assert exc_info.value.__cause__ is original
+
+
+def test_wait_until_has_value_raises_browser_action_error_when_not_visible() -> None:
+    locator = _make_locator()
+    locator.wait_for.side_effect = PlaywrightError("timeout")
+    with pytest.raises(BrowserActionError, match="translation field"):
+        wait_until_has_value(locator, "translation field")
 
 
 # --- wait_until_enabled ---

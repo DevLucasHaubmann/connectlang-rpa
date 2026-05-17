@@ -6,7 +6,7 @@ from connectlang_rpa.actions.browser_actions import (
     safe_click,
     safe_fill,
     safe_select_combobox,
-    wait_until_visible,
+    wait_until_has_value,
 )
 from connectlang_rpa.config.settings import Settings
 from connectlang_rpa.locators.vocabulary_locators import VocabularyLocators
@@ -78,7 +78,7 @@ class VocabularyService:
         )
 
     def wait_for_ai_completion(self) -> None:
-        wait_until_visible(
+        wait_until_has_value(
             self._locators.ai_filled_translation,
             context="AI generated translation",
             timeout_ms=self._settings.default_timeout_ms,

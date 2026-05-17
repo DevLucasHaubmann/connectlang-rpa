@@ -251,13 +251,15 @@ class TestTriggerAiFill:
 
 
 class TestWaitForAiCompletion:
-    def test_calls_wait_until_visible_on_ai_translation(self) -> None:
+    def test_calls_wait_until_has_value_on_ai_translation(self) -> None:
         service, page, settings = _make_service()
         translation_locator = MagicMock()
         service._locators = MagicMock()
         service._locators.ai_filled_translation = translation_locator
 
-        with patch("connectlang_rpa.services.vocabulary_service.wait_until_visible") as mock_wait:
+        with patch(
+            "connectlang_rpa.services.vocabulary_service.wait_until_has_value"
+        ) as mock_wait:
             service.wait_for_ai_completion()
 
         mock_wait.assert_called_once_with(
@@ -265,6 +267,22 @@ class TestWaitForAiCompletion:
             context="AI generated translation",
             timeout_ms=settings.default_timeout_ms,
         )
+
+    def test_error_propagates_when_field_remains_empty(self) -> None:
+        service, page, settings = _make_service()
+        service._locators = MagicMock()
+        original = BrowserActionError(
+            "'AI generated translation' was visible but remained empty after 10000ms"
+        )
+
+        with patch(
+            "connectlang_rpa.services.vocabulary_service.wait_until_has_value",
+            side_effect=original,
+        ):
+            with pytest.raises(BrowserActionError) as exc_info:
+                service.wait_for_ai_completion()
+
+        assert exc_info.value is original
 
 
 class TestSubmitWord:

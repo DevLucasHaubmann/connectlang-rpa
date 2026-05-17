@@ -22,3 +22,4 @@
 | 3.2 | Criar ações primitivas reutilizáveis | ✅ Concluída |
 | 4.1 | Criar VocabularyService | ✅ Concluída |
 | 4.2 | Implementar seleção Deutsch → English | ✅ Concluída |
+| 4.3 | Implementar espera da IA | ✅ Concluída |
