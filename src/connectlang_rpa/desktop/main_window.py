@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import sys
 from enum import Enum, auto
 from pathlib import Path
 
@@ -12,9 +13,26 @@ from connectlang_rpa.desktop.services.log_streamer import LogStreamer
 from connectlang_rpa.desktop.services.process_runner import ProcessRunner
 from connectlang_rpa.desktop.widgets.word_input_panel import WordInputPanel
 
-_PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
+
+def _frozen_root() -> Path:
+    """When PyInstaller freezes the app, the exe lives at dist/Name/Name.exe.
+    Walking up 3 levels reaches the project root where pyproject.toml lives."""
+    return Path(sys.executable).parent.parent.parent
+
+
+def _is_frozen() -> bool:
+    return getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS")
+
+
+_PROJECT_ROOT = _frozen_root() if _is_frozen() else Path(__file__).parent.parent.parent.parent
 _BOT_COMMAND = ["uv", "run", "connectlang-rpa"]
-_ICON_PATH = _PROJECT_ROOT / "assets" / "icon.ico"
+
+# When frozen, icon is bundled into _MEIPASS; otherwise load from project tree.
+_ICON_PATH = (
+    Path(getattr(sys, "_MEIPASS", "")) / "assets" / "icon.ico"
+    if _is_frozen()
+    else _PROJECT_ROOT / "assets" / "icon.ico"
+)
 
 
 class AppState(Enum):
@@ -158,6 +176,7 @@ class MainWindow(ctk.CTk):  # type: ignore[misc]  # CTk has no type stubs
         return WordInputPanel(
             self,
             on_list_saved=self._on_word_list_saved,
+            words_path=_PROJECT_ROOT / "data" / "words.json",
             fg_color=theme.BG_SECONDARY,
             corner_radius=theme.CORNER_RADIUS,
             border_width=theme.BORDER_WIDTH,
