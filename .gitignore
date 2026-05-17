@@ -1,0 +1,45 @@
+# ─── Python environment ────────────────────────────────────────────────────────
+.venv/
+__pycache__/
+*.py[cod]
+dist/
+build/
+*.egg-info/
+.coverage
+htmlcov/
+
+# ─── Test / lint caches ────────────────────────────────────────────────────────
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# ─── Secrets and environment variables ────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ─── Claude local settings (machine-specific, never shared) ──────────────────
+.claude/settings.local.json
+
+# ─── Robot runtime artifacts ──────────────────────────────────────────────────
+browser-profile/*
+!browser-profile/.gitkeep
+logs/*
+!logs/.gitkeep
+screenshots/*
+!screenshots/.gitkeep
+
+# ─── Execution / debug artifacts ──────────────────────────────────────────────
+*.log
+*.tmp
+*.bak
+*.trace
+traces/
+test-results/
+playwright-report/
+
+# ─── OS / editor ──────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
