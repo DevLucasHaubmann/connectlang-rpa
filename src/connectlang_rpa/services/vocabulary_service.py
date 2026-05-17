@@ -12,9 +12,12 @@ from connectlang_rpa.actions.browser_actions import (
     wait_until_visible,
 )
 from connectlang_rpa.config.settings import Settings
+from connectlang_rpa.exceptions import SessionExpiredError
 from connectlang_rpa.locators.vocabulary_locators import VocabularyLocators
 from connectlang_rpa.models.word_entry import WordEntry
 from connectlang_rpa.utils.retry import transient_retry
+
+_LOGIN_URL_PATTERNS = ("login", "auth", "entrar", "signin", "sign-in")
 
 
 class VocabularyService:
@@ -24,6 +27,38 @@ class VocabularyService:
         self._page = page
         self._settings = settings
         self._locators = VocabularyLocators(page)
+
+    def ensure_session_active(self) -> None:
+        """Navigate to the vocabulary page and verify the session is authenticated.
+
+        Raises SessionExpiredError if the URL signals a login redirect or the
+        main vocabulary button does not appear within the configured timeout.
+        """
+        self.go_to_vocabulary_page()
+        current_url = self._page.url.lower()
+        if any(pattern in current_url for pattern in _LOGIN_URL_PATTERNS):
+            raise SessionExpiredError(
+                f"Redirected to login page ({self._page.url}). "
+                "Open the browser, log in manually, and run again."
+            )
+        self._assert_vocabulary_page_ready()
+
+    def _assert_vocabulary_page_ready(self) -> None:
+        """Wait for the main vocabulary button to become visible.
+
+        Uses a semantic wait so slow page loads do not produce false negatives.
+        Raises SessionExpiredError if the button does not appear within timeout.
+        """
+        try:
+            self._locators.new_word_button.wait_for(
+                state="visible",
+                timeout=self._settings.default_timeout_ms,
+            )
+        except PlaywrightError as exc:
+            raise SessionExpiredError(
+                "Vocabulary page loaded but the expected UI was not found within timeout. "
+                "The session may have expired. Open the browser, log in manually, and run again."
+            ) from exc
 
     @transient_retry
     def go_to_vocabulary_page(self) -> None:

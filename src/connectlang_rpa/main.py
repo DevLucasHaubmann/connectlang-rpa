@@ -10,6 +10,7 @@ from playwright.sync_api import Page
 
 from connectlang_rpa.config.settings import get_settings
 from connectlang_rpa.core.browser import BrowserManager
+from connectlang_rpa.exceptions import SessionExpiredError
 from connectlang_rpa.models.word_entry import WordEntry
 from connectlang_rpa.services.vocabulary_service import VocabularyService
 from connectlang_rpa.services.word_loader import load_word_entries
@@ -94,6 +95,11 @@ def run() -> list[WordResult]:
 
     with BrowserManager(settings) as browser:
         service = VocabularyService(browser.page, settings)
+        try:
+            service.ensure_session_active()
+        except SessionExpiredError as exc:
+            log.error("session_expired", reason=str(exc))
+            sys.exit(f"[ERROR] Session expired or not authenticated: {exc}")
         for entry in entries:
             result = _process_word(service, entry, browser.page)
             results.append(result)
