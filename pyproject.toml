@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "RPA automation bot for the ConnectLang platform using Playwright."
 requires-python = ">=3.12"
 dependencies = [
+    "customtkinter>=5.2.2",
     "playwright>=1.59.0",
     "pydantic-settings>=2.14.1",
     "structlog>=25.5.0",
@@ -12,6 +13,7 @@ dependencies = [
 
 [project.scripts]
 connectlang-rpa = "connectlang_rpa.main:main"
+connectlang-desktop = "connectlang_rpa.desktop.app:main"
 
 [build-system]
 requires = ["hatchling"]
