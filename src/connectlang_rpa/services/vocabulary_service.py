@@ -9,9 +9,11 @@ from playwright.sync_api import Page, Response
 
 from connectlang_rpa.actions.browser_actions import (
     BrowserActionError,
+    dispatch_change_and_blur,
+    human_type,
     safe_click,
-    safe_fill,
     safe_select_combobox,
+    wait_until_enabled,
     wait_until_has_value,
     wait_until_hidden,
 )
@@ -86,7 +88,12 @@ class VocabularyService:
         )
 
     def fill_word_entry(self, word_entry: WordEntry) -> None:
-        # "Wort" is the default type — only switch when sentence is explicitly required.
+        """Fill the word/phrase field using human-like keystroke simulation.
+
+        Uses human_type() instead of fill() so that React/Vue input event handlers
+        fire and the framework's internal state reflects the typed value before
+        subsequent steps proceed.
+        """
         if word_entry.entry_type == "sentence":
             safe_click(
                 self._locators.sentence_type_option,
@@ -94,26 +101,93 @@ class VocabularyService:
                 timeout_ms=self._settings.default_timeout_ms,
             )
 
-        safe_fill(
+        human_type(
             self._locators.word_input,
             word_entry.text,
             context="word input",
             timeout_ms=self._settings.default_timeout_ms,
         )
 
+        actual_value: str = "<error>"
+        with contextlib.suppress(Exception):
+            actual_value = self._locators.word_input.input_value()
+        log.info("word_input_value_after_typing", word=word_entry.text, actual_value=actual_value)
+
     def select_languages(self) -> None:
+        """Select source and translation languages and dispatch change/blur events.
+
+        select_option() alone does not trigger the framework's onChange handlers.
+        Dispatching change+blur after each selection ensures the frontend state
+        is updated before the AI fill button is clicked.
+        """
         safe_select_combobox(
             self._locators.source_language_select,
             self._settings.word_language,
             context="source language select",
             timeout_ms=self._settings.default_timeout_ms,
         )
+        dispatch_change_and_blur(self._locators.source_language_select, "source language select")
+
         safe_select_combobox(
             self._locators.translation_language_select,
             self._settings.translation_language,
             context="translation language select",
             timeout_ms=self._settings.default_timeout_ms,
         )
+        dispatch_change_and_blur(
+            self._locators.translation_language_select, "translation language select"
+        )
+
+        source_lang: str = "<error>"
+        translation_lang: str = "<error>"
+        with contextlib.suppress(Exception):
+            source_lang = self._locators.source_language_select.input_value()
+        with contextlib.suppress(Exception):
+            translation_lang = self._locators.translation_language_select.input_value()
+        log.info(
+            "language_state_after_selection",
+            source_language=source_lang,
+            translation_language=translation_lang,
+        )
+
+    def _validate_form_before_ai(self, word_text: str) -> None:
+        """Verify that all fields are correctly set before triggering AI fill.
+
+        Raises BrowserActionError if any required field is missing or incorrect.
+        """
+        word_value: str = ""
+        with contextlib.suppress(Exception):
+            word_value = self._locators.word_input.input_value()
+
+        source_lang: str = ""
+        translation_lang: str = ""
+        with contextlib.suppress(Exception):
+            source_lang = self._locators.source_language_select.input_value()
+        with contextlib.suppress(Exception):
+            translation_lang = self._locators.translation_language_select.input_value()
+
+        ai_button_enabled = False
+        with contextlib.suppress(Exception):
+            btn = self._locators.ai_fill_button
+            ai_button_enabled = btn.is_visible() and btn.is_enabled()
+
+        log.info(
+            "ai_fields_ready",
+            word=word_text,
+            word_input_value=word_value,
+            source_language=source_lang,
+            translation_language=translation_lang,
+            ai_button_enabled=ai_button_enabled,
+        )
+
+        if not word_value:
+            raise BrowserActionError(f"Word input is empty before AI fill — expected '{word_text}'")
+        if not source_lang:
+            raise BrowserActionError("Source language not selected before AI fill")
+        if not translation_lang:
+            raise BrowserActionError("Translation language not selected before AI fill")
+        if not ai_button_enabled:
+            raise BrowserActionError("AI fill button is not enabled before clicking")
 
     def _is_ai_fill_already_triggered(self) -> bool:
         """Return True if the AI fill was already triggered (in progress or completed).
@@ -134,7 +208,8 @@ class VocabularyService:
         return False
 
     @transient_retry
-    def trigger_ai_fill(self) -> None:
+    def trigger_ai_fill(self, word_text: str) -> None:
+        self._validate_form_before_ai(word_text)
         if self._is_ai_fill_already_triggered():
             return
         safe_click(
@@ -145,30 +220,35 @@ class VocabularyService:
 
     @transient_retry
     def wait_for_ai_completion(self) -> None:
+        """Wait for AI fill to fully complete.
+
+        Completion requires:
+        1. Translation field has a non-empty value.
+        2. Submit button is enabled (not just visible) — the platform enables it
+           only after the AI response is fully processed and the form is valid.
+        """
         wait_until_has_value(
             self._locators.ai_filled_translation,
             context="AI generated translation",
             timeout_ms=self._settings.default_timeout_ms,
         )
-
-    def wait_for_submission_completion(self) -> None:
-        """Wait for the creation form to close after submitting a word.
-
-        The ConnectLang UI does not expose a role="status" message after saving.
-        The reliable signal is the submit button becoming hidden, which happens
-        when the modal/form closes on success.
-        """
-        wait_until_hidden(
+        wait_until_enabled(
             self._locators.submit_button,
-            context="submit button after word submission",
+            context="submit button after AI completion",
             timeout_ms=self._settings.default_timeout_ms,
         )
 
-    def _log_form_state_before_submit(self, word_text: str) -> None:
-        """Log the visible state of every required field and the submit button.
+    def _blur_active_field(self) -> None:
+        """Click the page body to blur any focused input before submitting.
 
-        Purely diagnostic — does not raise, does not block submission.
+        Forces the frontend to process any pending onChange/onBlur handlers
+        before the submit click reaches the button.
         """
+        with contextlib.suppress(PlaywrightError):
+            self._page.evaluate("document.activeElement?.blur()")
+
+    def _log_form_state_before_submit(self, word_text: str) -> None:
+        """Log the visible state of every required field and the submit button."""
         translation_value: str = ""
         try:
             t = self._locators.ai_filled_translation
@@ -205,19 +285,58 @@ class VocabularyService:
             url=self._page.url,
         )
 
-    def submit_word(self, word_text: str) -> None:
-        """Click the submit button and wait for the form to close.
+        log.info(
+            "submit_button_state_before_click",
+            submit_button_count=submit_count,
+            submit_button_enabled=submit_enabled,
+            submit_button_bbox=submit_bbox,
+        )
 
-        Attaches a temporary response listener to capture mutating HTTP requests
-        made during the submit window. Logs network outcomes for diagnostics;
-        does not raise based on network state alone (UI signal remains authoritative
-        for form-close detection).
+    def wait_for_submission_completion(
+        self, captured: list[dict[str, Any]], word_text: str
+    ) -> None:
+        """Wait for the submit operation to produce a mutating network request.
+
+        Waits for the form to close (submit button hidden) as the UI signal,
+        then validates that at least one mutating HTTP request was captured.
+
+        Raises BrowserActionError if the form closes with no mutating request,
+        which indicates the click did not trigger the backend save operation.
+        """
+        wait_until_hidden(
+            self._locators.submit_button,
+            context="submit button after word submission",
+            timeout_ms=self._settings.default_timeout_ms,
+        )
+
+        if not captured:
+            log.warning(
+                "submit_network_no_request",
+                word=word_text,
+                detail="form closed but no mutating request was captured",
+            )
+            raise BrowserActionError(
+                f"submit_network_no_request: form closed for '{word_text}' "
+                "but no POST/PUT/PATCH was captured. The click did not trigger a backend save."
+            )
+
+    def submit_word(self, word_text: str) -> None:
+        """Click the submit button and confirm a mutating network request was made.
+
+        Blurs any active field first so the frontend processes all pending event
+        handlers before the submit click. Attaches a response listener to capture
+        mutating HTTP requests made during the submit window.
+
+        Raises BrowserActionError if no mutating request is captured after the
+        form closes, indicating a false-success scenario.
         """
         wait_until_has_value(
             self._locators.ai_filled_translation,
             context="AI generated translation before submit",
             timeout_ms=self._settings.default_timeout_ms,
         )
+
+        self._blur_active_field()
         self._log_form_state_before_submit(word_text)
 
         captured: list[dict[str, Any]] = []
@@ -247,25 +366,19 @@ class VocabularyService:
                 timeout_ms=self._settings.default_timeout_ms,
             )
             log.info("word_submit_clicked", word=word_text)
-            self.wait_for_submission_completion()
+            self.wait_for_submission_completion(captured, word_text)
         finally:
             self._page.remove_listener("response", _on_response)
 
-        if captured:
-            for r in captured:
-                status = r["status"]
-                event = "submit_network_success" if 200 <= status < 300 else "submit_network_failed"
-                log.info(
-                    event,
-                    method=r["method"],
-                    url=r["url"],
-                    status=status,
-                    body_excerpt=r["body_excerpt"],
-                )
-        else:
-            log.warning(
-                "submit_network_no_request",
-                detail="no mutating request captured during submit",
+        for r in captured:
+            status = r["status"]
+            event = "submit_network_success" if 200 <= status < 300 else "submit_network_failed"
+            log.info(
+                event,
+                method=r["method"],
+                url=r["url"],
+                status=status,
+                body_excerpt=r["body_excerpt"],
             )
 
     def verify_word_persisted(self, word_text: str) -> None:
@@ -300,7 +413,7 @@ class VocabularyService:
         self.open_new_word_form()
         self.fill_word_entry(word_entry)
         self.select_languages()
-        self.trigger_ai_fill()
+        self.trigger_ai_fill(word_entry.text)
         self.wait_for_ai_completion()
         self.submit_word(word_entry.text)
         log.info("word_submit_feedback_received", word=word_entry.text)

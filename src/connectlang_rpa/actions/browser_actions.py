@@ -99,6 +99,44 @@ def safe_fill(
         raise BrowserActionError(f"Failed to fill '{context}': {exc}") from exc
 
 
+def human_type(
+    locator: Locator,
+    value: str,
+    context: str,
+    timeout_ms: int | None = None,
+) -> None:
+    """Type into a field simulating human input: click, clear, type char-by-char, blur, verify.
+
+    Unlike fill(), this fires the native input/change/blur event chain that frontend
+    frameworks (React, Vue) rely on to update their internal state.
+    """
+    timeout = timeout_ms if timeout_ms is not None else _DEFAULT_TIMEOUT_MS
+    wait_until_enabled(locator, context, timeout_ms)
+    try:
+        locator.click(timeout=timeout)
+        locator.press("Control+a")
+        locator.press("Delete")
+        locator.press_sequentially(value, delay=50)
+        locator.dispatch_event("input")
+        locator.dispatch_event("blur")
+        expect(locator).to_have_value(value, timeout=timeout)
+    except (PlaywrightError, AssertionError) as exc:
+        raise BrowserActionError(f"Failed to human-type into '{context}': {exc}") from exc
+
+
+def dispatch_change_and_blur(locator: Locator, context: str) -> None:
+    """Dispatch change and blur events on a locator.
+
+    Used after programmatic select_option() calls so that frontend frameworks
+    receive the same event sequence a real user interaction would produce.
+    """
+    try:
+        locator.dispatch_event("change")
+        locator.dispatch_event("blur")
+    except PlaywrightError as exc:
+        raise BrowserActionError(f"Failed to dispatch change/blur on '{context}': {exc}") from exc
+
+
 def safe_select(
     locator: Locator,
     value: str,

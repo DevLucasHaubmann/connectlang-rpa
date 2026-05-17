@@ -90,12 +90,12 @@ class TestFillWordEntry:
 
         with (
             patch("connectlang_rpa.services.vocabulary_service.safe_click") as mock_click,
-            patch("connectlang_rpa.services.vocabulary_service.safe_fill") as mock_fill,
+            patch("connectlang_rpa.services.vocabulary_service.human_type") as mock_type,
         ):
             service.fill_word_entry(entry)
 
         mock_click.assert_not_called()
-        mock_fill.assert_called_once_with(
+        mock_type.assert_called_once_with(
             input_locator,
             "Haus",
             context="word input",
@@ -114,7 +114,7 @@ class TestFillWordEntry:
 
         with (
             patch("connectlang_rpa.services.vocabulary_service.safe_click") as mock_click,
-            patch("connectlang_rpa.services.vocabulary_service.safe_fill") as mock_fill,
+            patch("connectlang_rpa.services.vocabulary_service.human_type") as mock_type,
         ):
             service.fill_word_entry(entry)
 
@@ -123,7 +123,7 @@ class TestFillWordEntry:
             context="sentence type option",
             timeout_ms=settings.default_timeout_ms,
         )
-        mock_fill.assert_called_once_with(
+        mock_type.assert_called_once_with(
             input_locator,
             "Das Haus ist groß.",
             context="word input",
@@ -248,9 +248,10 @@ class TestTriggerAiFill:
         service, _page, settings = _make_service()
         service._locators = self._make_idle_locators()
         ai_locator = service._locators.ai_fill_button
+        service._validate_form_before_ai = MagicMock()
 
         with patch("connectlang_rpa.services.vocabulary_service.safe_click") as mock_click:
-            service.trigger_ai_fill()
+            service.trigger_ai_fill("Haus")
 
         mock_click.assert_called_once_with(
             ai_locator,
@@ -262,9 +263,10 @@ class TestTriggerAiFill:
         service, _page, _settings = _make_service()
         service._locators = self._make_idle_locators()
         service._locators.ai_fill_button.is_enabled.return_value = False
+        service._validate_form_before_ai = MagicMock()
 
         with patch("connectlang_rpa.services.vocabulary_service.safe_click") as mock_click:
-            service.trigger_ai_fill()
+            service.trigger_ai_fill("Haus")
 
         mock_click.assert_not_called()
 
@@ -272,9 +274,10 @@ class TestTriggerAiFill:
         service, _page, _settings = _make_service()
         service._locators = self._make_idle_locators()
         service._locators.ai_filled_translation.input_value.return_value = "some translation"
+        service._validate_form_before_ai = MagicMock()
 
         with patch("connectlang_rpa.services.vocabulary_service.safe_click") as mock_click:
-            service.trigger_ai_fill()
+            service.trigger_ai_fill("Haus")
 
         mock_click.assert_not_called()
 
@@ -286,12 +289,37 @@ class TestWaitForAiCompletion:
         service._locators = MagicMock()
         service._locators.ai_filled_translation = translation_locator
 
-        with patch("connectlang_rpa.services.vocabulary_service.wait_until_has_value") as mock_wait:
+        with (
+            patch(
+                "connectlang_rpa.services.vocabulary_service.wait_until_has_value"
+            ) as mock_wait,
+            patch("connectlang_rpa.services.vocabulary_service.wait_until_enabled"),
+        ):
             service.wait_for_ai_completion()
 
         mock_wait.assert_called_once_with(
             translation_locator,
             context="AI generated translation",
+            timeout_ms=settings.default_timeout_ms,
+        )
+
+    def test_also_waits_for_submit_button_enabled_after_ai(self) -> None:
+        service, _page, settings = _make_service()
+        submit_locator = MagicMock()
+        service._locators = MagicMock()
+        service._locators.submit_button = submit_locator
+
+        with (
+            patch("connectlang_rpa.services.vocabulary_service.wait_until_has_value"),
+            patch(
+                "connectlang_rpa.services.vocabulary_service.wait_until_enabled"
+            ) as mock_enabled,
+        ):
+            service.wait_for_ai_completion()
+
+        mock_enabled.assert_called_once_with(
+            submit_locator,
+            context="submit button after AI completion",
             timeout_ms=settings.default_timeout_ms,
         )
 
@@ -320,9 +348,10 @@ class TestWaitForSubmissionCompletion:
         submit_locator = MagicMock()
         service._locators = MagicMock()
         service._locators.submit_button = submit_locator
+        captured: list[dict] = [{"method": "POST", "url": "/api/words", "status": 201, "body_excerpt": ""}]
 
         with patch("connectlang_rpa.services.vocabulary_service.wait_until_hidden") as mock_hidden:
-            service.wait_for_submission_completion()
+            service.wait_for_submission_completion(captured, "Haus")
 
         mock_hidden.assert_called_once_with(
             submit_locator,
@@ -330,12 +359,23 @@ class TestWaitForSubmissionCompletion:
             timeout_ms=settings.default_timeout_ms,
         )
 
+    def test_raises_if_form_closes_with_no_network_request(self) -> None:
+        service, _page, _settings = _make_service()
+        service._locators = MagicMock()
+
+        with (
+            patch("connectlang_rpa.services.vocabulary_service.wait_until_hidden"),
+            pytest.raises(BrowserActionError, match="submit_network_no_request"),
+        ):
+            service.wait_for_submission_completion([], "Haus")
+
     def test_error_propagates_if_form_does_not_close(self) -> None:
         service, _page, _settings = _make_service()
         service._locators = MagicMock()
         original = BrowserActionError(
             "Timed out waiting for 'submit button after word submission' to become hidden"
         )
+        captured: list[dict] = [{"method": "POST", "url": "/api/words", "status": 201, "body_excerpt": ""}]
 
         with (
             patch(
@@ -344,7 +384,7 @@ class TestWaitForSubmissionCompletion:
             ),
             pytest.raises(BrowserActionError) as exc_info,
         ):
-            service.wait_for_submission_completion()
+            service.wait_for_submission_completion(captured, "Haus")
 
         assert exc_info.value is original
 
