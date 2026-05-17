@@ -98,9 +98,7 @@ def safe_select(
     try:
         locator.select_option(value, timeout=timeout)
     except PlaywrightError as exc:
-        raise BrowserActionError(
-            f"Failed to select '{value}' on '{context}': {exc}"
-        ) from exc
+        raise BrowserActionError(f"Failed to select '{value}' on '{context}': {exc}") from exc
 
 
 def safe_select_combobox(
@@ -134,6 +132,4 @@ def _click_combobox_option(
         locator.click(timeout=timeout)
         locator.page.get_by_role("option", name=value).click(timeout=timeout)
     except PlaywrightError as exc:
-        raise BrowserActionError(
-            f"Failed to select '{value}' on '{context}'"
-        ) from exc
+        raise BrowserActionError(f"Failed to select '{value}' on '{context}'") from exc

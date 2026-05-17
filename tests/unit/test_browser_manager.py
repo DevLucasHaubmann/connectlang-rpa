@@ -19,13 +19,13 @@ def _make_settings(tmp_path: Path) -> MagicMock:
 def test_page_before_start_raises(tmp_path: Path) -> None:
     manager = BrowserManager(_make_settings(tmp_path))
     with pytest.raises(RuntimeError, match="not started"):
-        _ = manager.page  # noqa: F841
+        _ = manager.page
 
 
 def test_context_before_start_raises(tmp_path: Path) -> None:
     manager = BrowserManager(_make_settings(tmp_path))
     with pytest.raises(RuntimeError, match="not started"):
-        _ = manager.context  # noqa: F841
+        _ = manager.context
 
 
 def test_close_without_start_is_safe(tmp_path: Path) -> None:
@@ -65,8 +65,10 @@ def test_context_manager_calls_start_and_close(tmp_path: Path) -> None:
     settings = _make_settings(tmp_path)
     manager = BrowserManager(settings)
 
-    with patch.object(manager, "start", return_value=manager) as mock_start, \
-         patch.object(manager, "close") as mock_close:
+    with (
+        patch.object(manager, "start", return_value=manager) as mock_start,
+        patch.object(manager, "close") as mock_close,
+    ):
         with manager:
             pass
         mock_start.assert_called_once()

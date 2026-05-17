@@ -17,9 +17,7 @@ def ensure_browser_profile_ready(profile_dir: Path) -> None:
         BrowserProfileLockError: if a Chromium lock file is detected.
     """
     if profile_dir.exists() and not profile_dir.is_dir():
-        raise ValueError(
-            f"Browser profile path exists but is not a directory: {profile_dir}"
-        )
+        raise ValueError(f"Browser profile path exists but is not a directory: {profile_dir}")
 
     profile_dir.mkdir(parents=True, exist_ok=True)
 
