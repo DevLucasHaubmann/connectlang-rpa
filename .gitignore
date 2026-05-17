@@ -29,6 +29,9 @@ logs/*
 screenshots/*
 !screenshots/.gitkeep
 
+# ─── Local data files (example kept; real list is machine-specific) ───────────
+data/words.json
+
 # ─── Execution / debug artifacts ──────────────────────────────────────────────
 *.log
 *.tmp
