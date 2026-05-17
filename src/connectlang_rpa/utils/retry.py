@@ -21,7 +21,7 @@ _WAIT_MAX_S = 10.0
 def _log_retry_attempt(state: RetryCallState) -> None:
     exc = state.outcome.exception() if state.outcome else None
     _log.warning(
-        "transient_retry",
+        "retry_attempt",
         attempt=state.attempt_number,
         max_attempts=_MAX_ATTEMPTS,
         error=str(exc) if exc else None,
