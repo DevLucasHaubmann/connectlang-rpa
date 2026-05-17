@@ -17,12 +17,14 @@ def _make_settings(
     default_timeout_ms: int = 10_000,
     word_language: str = "de",
     translation_language: str = "en",
+    debug_pause_before_submit: bool = False,
 ) -> MagicMock:
     settings = MagicMock()
     settings.target_url = target_url
     settings.default_timeout_ms = default_timeout_ms
     settings.word_language = word_language
     settings.translation_language = translation_language
+    settings.debug_pause_before_submit = debug_pause_before_submit
     return settings
 
 
@@ -290,9 +292,7 @@ class TestWaitForAiCompletion:
         service._locators.ai_filled_translation = translation_locator
 
         with (
-            patch(
-                "connectlang_rpa.services.vocabulary_service.wait_until_has_value"
-            ) as mock_wait,
+            patch("connectlang_rpa.services.vocabulary_service.wait_until_has_value") as mock_wait,
             patch("connectlang_rpa.services.vocabulary_service.wait_until_enabled"),
         ):
             service.wait_for_ai_completion()
@@ -311,9 +311,7 @@ class TestWaitForAiCompletion:
 
         with (
             patch("connectlang_rpa.services.vocabulary_service.wait_until_has_value"),
-            patch(
-                "connectlang_rpa.services.vocabulary_service.wait_until_enabled"
-            ) as mock_enabled,
+            patch("connectlang_rpa.services.vocabulary_service.wait_until_enabled") as mock_enabled,
         ):
             service.wait_for_ai_completion()
 
@@ -348,10 +346,12 @@ class TestWaitForSubmissionCompletion:
         submit_locator = MagicMock()
         service._locators = MagicMock()
         service._locators.submit_button = submit_locator
-        captured: list[dict] = [{"method": "POST", "url": "/api/words", "status": 201, "body_excerpt": ""}]
+        captured: list[dict] = [
+            {"method": "POST", "url": "/api/words", "status": 201, "body_excerpt": ""}
+        ]
 
         with patch("connectlang_rpa.services.vocabulary_service.wait_until_hidden") as mock_hidden:
-            service.wait_for_submission_completion(captured, "Haus")
+            service.wait_for_submission_completion(captured, [], "Haus")
 
         mock_hidden.assert_called_once_with(
             submit_locator,
@@ -367,7 +367,7 @@ class TestWaitForSubmissionCompletion:
             patch("connectlang_rpa.services.vocabulary_service.wait_until_hidden"),
             pytest.raises(BrowserActionError, match="submit_network_no_request"),
         ):
-            service.wait_for_submission_completion([], "Haus")
+            service.wait_for_submission_completion([], [], "Haus")
 
     def test_error_propagates_if_form_does_not_close(self) -> None:
         service, _page, _settings = _make_service()
@@ -375,7 +375,9 @@ class TestWaitForSubmissionCompletion:
         original = BrowserActionError(
             "Timed out waiting for 'submit button after word submission' to become hidden"
         )
-        captured: list[dict] = [{"method": "POST", "url": "/api/words", "status": 201, "body_excerpt": ""}]
+        captured: list[dict] = [
+            {"method": "POST", "url": "/api/words", "status": 201, "body_excerpt": ""}
+        ]
 
         with (
             patch(
@@ -384,9 +386,29 @@ class TestWaitForSubmissionCompletion:
             ),
             pytest.raises(BrowserActionError) as exc_info,
         ):
-            service.wait_for_submission_completion(captured, "Haus")
+            service.wait_for_submission_completion(captured, [], "Haus")
 
         assert exc_info.value is original
+
+    def test_logs_all_requests_even_when_no_mutating_request(self) -> None:
+        service, _page, _settings = _make_service()
+        service._locators = MagicMock()
+        all_reqs = [
+            {"method": "GET", "url": "/api/session", "resource_type": "fetch", "status": 200}
+        ]
+
+        with (
+            patch("connectlang_rpa.services.vocabulary_service.wait_until_hidden"),
+            structlog.testing.capture_logs() as logs,
+            pytest.raises(BrowserActionError, match="submit_network_no_request"),
+        ):
+            service.wait_for_submission_completion([], all_reqs, "Haus")
+
+        captured_log = next(
+            (e for e in logs if e.get("event") == "submit_all_requests_captured"), None
+        )
+        assert captured_log is not None
+        assert captured_log["total_count"] == 1
 
 
 class TestSubmitWord:

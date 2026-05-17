@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     batch_size: int
     word_language: str
     translation_language: str
+    debug_pause_before_submit: bool = False
 
     @field_validator("target_url", "word_language", "translation_language")
     @classmethod

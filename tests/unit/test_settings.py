@@ -51,6 +51,14 @@ class TestSettingsValid:
         s = _make_settings({"ACTION_DELAY_MS": "0"})
         assert s.action_delay_ms == 0
 
+    def test_debug_pause_before_submit_defaults_to_false(self) -> None:
+        s = _make_settings()
+        assert s.debug_pause_before_submit is False
+
+    def test_debug_pause_before_submit_can_be_enabled(self) -> None:
+        s = _make_settings({"DEBUG_PAUSE_BEFORE_SUBMIT": "true"})
+        assert s.debug_pause_before_submit is True
+
 
 class TestSettingsValidation:
     def test_rejects_empty_target_url(self) -> None:

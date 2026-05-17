@@ -4,8 +4,8 @@ import contextlib
 from typing import Any
 
 import structlog
+from playwright.sync_api import ConsoleMessage, Page, Response
 from playwright.sync_api import Error as PlaywrightError
-from playwright.sync_api import Page, Response
 
 from connectlang_rpa.actions.browser_actions import (
     BrowserActionError,
@@ -238,6 +238,88 @@ class VocabularyService:
             timeout_ms=self._settings.default_timeout_ms,
         )
 
+    def _log_submit_button_details(self, word_text: str) -> None:
+        """Log full DOM state of the submit button before clicking.
+
+        Reads tagName, type, disabled, aria-disabled, textContent, and a truncated
+        outerHTML via evaluate() so that any discrepancy between what Playwright sees
+        and what the browser exposes is captured before the click attempt.
+        """
+        try:
+            btn = self._locators.submit_button
+            count = btn.count()
+            if count == 0:
+                log.warning("submit_button_not_found", word=word_text)
+                return
+            el = btn.first
+            bbox = el.bounding_box()
+            is_visible = el.is_visible()
+            is_enabled = el.is_enabled()
+            tag_name: str = el.evaluate("el => el.tagName")
+            btn_type: str | None = el.evaluate("el => el.type || null")
+            disabled: bool = el.evaluate("el => el.disabled")
+            aria_disabled: str | None = el.evaluate("el => el.getAttribute('aria-disabled')")
+            text_content: str = el.evaluate("el => (el.textContent || '').trim().slice(0, 100)")
+            outer_html: str = el.evaluate("el => el.outerHTML.slice(0, 300)")
+            log.info(
+                "submit_button_detailed_state",
+                word=word_text,
+                button_count=count,
+                tag_name=tag_name,
+                btn_type=btn_type,
+                disabled=disabled,
+                aria_disabled=aria_disabled,
+                text_content=text_content,
+                outer_html=outer_html,
+                bbox=bbox,
+                is_visible=is_visible,
+                is_enabled=is_enabled,
+            )
+        except Exception as exc:
+            log.warning("submit_button_details_error", word=word_text, error=str(exc))
+
+    def _log_button_hit_test(self, word_text: str) -> None:
+        """Report which DOM element is at the submit button's visual center.
+
+        Uses document.elementFromPoint(centerX, centerY) to detect whether an
+        overlay, wrapper, or child element intercepts the click before it reaches
+        the button's own event handler. Logs whether the element found is the
+        button itself, a descendant of it, or an unrelated element.
+        """
+        try:
+            btn = self._locators.submit_button.first
+            bbox = btn.bounding_box()
+            if not bbox:
+                log.warning("submit_button_hittest_no_bbox", word=word_text)
+                return
+            cx = bbox["x"] + bbox["width"] / 2
+            cy = bbox["y"] + bbox["height"] / 2
+            result: dict[str, Any] | None = self._page.evaluate(
+                """([x, y]) => {
+                    const el = document.elementFromPoint(x, y);
+                    if (!el) return null;
+                    return {
+                        tagName: el.tagName,
+                        textContent: (el.textContent || '').trim().slice(0, 100),
+                        className: el.className || '',
+                        disabled: el.disabled ?? null,
+                        ariaDisabled: el.getAttribute('aria-disabled'),
+                        isButton: el.tagName === 'BUTTON',
+                        outerHTML: el.outerHTML.slice(0, 200),
+                    };
+                }""",
+                [cx, cy],
+            )
+            log.info(
+                "submit_button_hittest",
+                word=word_text,
+                center_x=cx,
+                center_y=cy,
+                element_at_point=result,
+            )
+        except Exception as exc:
+            log.warning("submit_button_hittest_error", word=word_text, error=str(exc))
+
     def _blur_active_field(self) -> None:
         """Click the page body to blur any focused input before submitting.
 
@@ -293,12 +375,16 @@ class VocabularyService:
         )
 
     def wait_for_submission_completion(
-        self, captured: list[dict[str, Any]], word_text: str
+        self,
+        captured: list[dict[str, Any]],
+        all_requests: list[dict[str, Any]],
+        word_text: str,
     ) -> None:
         """Wait for the submit operation to produce a mutating network request.
 
         Waits for the form to close (submit button hidden) as the UI signal,
         then validates that at least one mutating HTTP request was captured.
+        Logs all requests (including GET/fetch/XHR) for diagnostic purposes.
 
         Raises BrowserActionError if the form closes with no mutating request,
         which indicates the click did not trigger the backend save operation.
@@ -309,11 +395,19 @@ class VocabularyService:
             timeout_ms=self._settings.default_timeout_ms,
         )
 
+        log.info(
+            "submit_all_requests_captured",
+            word=word_text,
+            total_count=len(all_requests),
+            requests=all_requests[:30],
+        )
+
         if not captured:
             log.warning(
                 "submit_network_no_request",
                 word=word_text,
                 detail="form closed but no mutating request was captured",
+                all_requests_count=len(all_requests),
             )
             raise BrowserActionError(
                 f"submit_network_no_request: form closed for '{word_text}' "
@@ -324,8 +418,12 @@ class VocabularyService:
         """Click the submit button and confirm a mutating network request was made.
 
         Blurs any active field first so the frontend processes all pending event
-        handlers before the submit click. Attaches a response listener to capture
-        mutating HTTP requests made during the submit window.
+        handlers before the submit click. Attaches listeners for all network
+        responses, console errors, and page errors during the submit window.
+        Runs a hit-test and logs full button DOM state before clicking.
+
+        When DEBUG_PAUSE_BEFORE_SUBMIT=true, pauses the browser before clicking
+        so the user can click manually to determine whether the form state is valid.
 
         Raises BrowserActionError if no mutating request is captured after the
         form closes, indicating a false-success scenario.
@@ -338,10 +436,22 @@ class VocabularyService:
 
         self._blur_active_field()
         self._log_form_state_before_submit(word_text)
+        self._log_submit_button_details(word_text)
+        self._log_button_hit_test(word_text)
 
-        captured: list[dict[str, Any]] = []
+        all_requests: list[dict[str, Any]] = []
+        mutating_requests: list[dict[str, Any]] = []
+        console_errors: list[str] = []
+        page_errors: list[str] = []
 
         def _on_response(response: Response) -> None:
+            entry: dict[str, Any] = {
+                "method": response.request.method,
+                "url": response.url,
+                "resource_type": response.request.resource_type,
+                "status": response.status,
+            }
+            all_requests.append(entry)
             if response.request.method not in ("POST", "PUT", "PATCH"):
                 return
             body_excerpt = ""
@@ -349,28 +459,46 @@ class VocabularyService:
                 body_excerpt = response.text()[:200]
             except Exception:
                 body_excerpt = "<unreadable>"
-            captured.append(
-                {
-                    "method": response.request.method,
-                    "url": response.url,
-                    "status": response.status,
-                    "body_excerpt": body_excerpt,
-                }
-            )
+            mutating_entry = {**entry, "body_excerpt": body_excerpt}
+            mutating_requests.append(mutating_entry)
+
+        def _on_console(msg: ConsoleMessage) -> None:
+            if msg.type == "error":
+                console_errors.append(msg.text)
+                log.warning("submit_console_error", word=word_text, message=msg.text)
+
+        def _on_page_error(exc: Exception) -> None:
+            page_errors.append(str(exc))
+            log.warning("submit_page_error", word=word_text, error=str(exc))
 
         self._page.on("response", _on_response)
+        self._page.on("console", _on_console)
+        self._page.on("pageerror", _on_page_error)
         try:
+            if self._settings.debug_pause_before_submit:
+                log.info(
+                    "debug_pause_before_submit",
+                    word=word_text,
+                    detail=(
+                        "Pausing before submit click — click 'Zu meinen Wörtern hinzufügen' "
+                        "manually in the browser to test form state validity"
+                    ),
+                )
+                self._page.pause()
+
             safe_click(
                 self._locators.submit_button,
                 context="submit word button",
                 timeout_ms=self._settings.default_timeout_ms,
             )
             log.info("word_submit_clicked", word=word_text)
-            self.wait_for_submission_completion(captured, word_text)
+            self.wait_for_submission_completion(mutating_requests, all_requests, word_text)
         finally:
             self._page.remove_listener("response", _on_response)
+            self._page.remove_listener("console", _on_console)
+            self._page.remove_listener("pageerror", _on_page_error)
 
-        for r in captured:
+        for r in mutating_requests:
             status = r["status"]
             event = "submit_network_success" if 200 <= status < 300 else "submit_network_failed"
             log.info(
