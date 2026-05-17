@@ -18,3 +18,5 @@
 | 1.3 | Criar carregador de palavras | ✅ Concluída |
 | 2.1 | Criar BrowserManager com sessão persistente | ✅ Concluída |
 | 2.2 | Criar pre-flight check do perfil persistente | ✅ Concluída |
+| 3.1 | Mapear locators principais da página de vocabulário | ✅ Concluída |
+| 3.2 | Criar ações primitivas reutilizáveis | ✅ Concluída |
