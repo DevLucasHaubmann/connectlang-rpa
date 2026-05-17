@@ -16,10 +16,13 @@ def _write_json(tmp_path: Path, data: object) -> Path:
 
 
 def test_loads_valid_entries(tmp_path: Path) -> None:
-    path = _write_json(tmp_path, [
-        {"text": "der Termin", "entry_type": "word"},
-        {"text": "Ich lerne Deutsch.", "entry_type": "sentence"},
-    ])
+    path = _write_json(
+        tmp_path,
+        [
+            {"text": "der Termin", "entry_type": "word"},
+            {"text": "Ich lerne Deutsch.", "entry_type": "sentence"},
+        ],
+    )
     entries = load_word_entries(path)
     assert entries == [
         WordEntry(text="der Termin", entry_type="word"),

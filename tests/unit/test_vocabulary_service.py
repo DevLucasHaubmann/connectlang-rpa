@@ -61,7 +61,7 @@ class TestGoToVocabularyPage:
 
 class TestOpenNewWordForm:
     def test_calls_safe_click_on_new_word_button(self) -> None:
-        service, page, settings = _make_service()
+        service, _page, settings = _make_service()
         mock_locator = MagicMock()
         service._locators = MagicMock()
         service._locators.new_word_button = mock_locator
@@ -78,7 +78,7 @@ class TestOpenNewWordForm:
 
 class TestFillWordEntry:
     def test_word_type_clicks_word_option_and_fills_text(self) -> None:
-        service, page, settings = _make_service()
+        service, _page, settings = _make_service()
         word_locator = MagicMock()
         input_locator = MagicMock()
         service._locators = MagicMock()
@@ -106,7 +106,7 @@ class TestFillWordEntry:
         )
 
     def test_sentence_type_clicks_sentence_option_and_fills_text(self) -> None:
-        service, page, settings = _make_service()
+        service, _page, settings = _make_service()
         sentence_locator = MagicMock()
         input_locator = MagicMock()
         service._locators = MagicMock()
@@ -136,7 +136,7 @@ class TestFillWordEntry:
 
 class TestSelectLanguages:
     def test_uses_word_language_setting_for_source(self) -> None:
-        service, page, settings = _make_service()
+        service, _page, settings = _make_service()
         source_locator = MagicMock()
         service._locators = MagicMock()
         service._locators.source_language_select = source_locator
@@ -154,7 +154,7 @@ class TestSelectLanguages:
         )
 
     def test_uses_translation_language_setting_for_translation(self) -> None:
-        service, page, settings = _make_service()
+        service, _page, settings = _make_service()
         translation_locator = MagicMock()
         service._locators = MagicMock()
         service._locators.translation_language_select = translation_locator
@@ -172,7 +172,7 @@ class TestSelectLanguages:
         )
 
     def test_calls_safe_select_combobox_for_both_fields_in_order(self) -> None:
-        service, page, settings = _make_service()
+        service, _page, settings = _make_service()
         source_locator = MagicMock()
         translation_locator = MagicMock()
         service._locators = MagicMock()
@@ -201,21 +201,23 @@ class TestSelectLanguages:
         ]
 
     def test_source_language_error_propagates_without_swallowing(self) -> None:
-        service, page, settings = _make_service()
+        service, _page, _settings = _make_service()
         service._locators = MagicMock()
         original = BrowserActionError("Failed to select 'de' on 'source language select'")
 
-        with patch(
-            "connectlang_rpa.services.vocabulary_service.safe_select_combobox",
-            side_effect=original,
+        with (
+            patch(
+                "connectlang_rpa.services.vocabulary_service.safe_select_combobox",
+                side_effect=original,
+            ),
+            pytest.raises(BrowserActionError) as exc_info,
         ):
-            with pytest.raises(BrowserActionError) as exc_info:
-                service.select_languages()
+            service.select_languages()
 
         assert exc_info.value is original
 
     def test_translation_language_error_propagates_without_swallowing(self) -> None:
-        service, page, settings = _make_service()
+        service, _page, _settings = _make_service()
         service._locators = MagicMock()
         original = BrowserActionError("Failed to select 'en' on 'translation language select'")
 
@@ -223,12 +225,14 @@ class TestSelectLanguages:
             if "translation" in kwargs.get("context", ""):
                 raise original
 
-        with patch(
-            "connectlang_rpa.services.vocabulary_service.safe_select_combobox",
-            side_effect=_raise_on_translation,
+        with (
+            patch(
+                "connectlang_rpa.services.vocabulary_service.safe_select_combobox",
+                side_effect=_raise_on_translation,
+            ),
+            pytest.raises(BrowserActionError) as exc_info,
         ):
-            with pytest.raises(BrowserActionError) as exc_info:
-                service.select_languages()
+            service.select_languages()
 
         assert exc_info.value is original
 
@@ -244,7 +248,7 @@ class TestTriggerAiFill:
         return locators
 
     def test_calls_safe_click_on_ai_fill_button(self) -> None:
-        service, page, settings = _make_service()
+        service, _page, settings = _make_service()
         service._locators = self._make_idle_locators()
         ai_locator = service._locators.ai_fill_button
 
@@ -280,14 +284,12 @@ class TestTriggerAiFill:
 
 class TestWaitForAiCompletion:
     def test_calls_wait_until_has_value_on_ai_translation(self) -> None:
-        service, page, settings = _make_service()
+        service, _page, settings = _make_service()
         translation_locator = MagicMock()
         service._locators = MagicMock()
         service._locators.ai_filled_translation = translation_locator
 
-        with patch(
-            "connectlang_rpa.services.vocabulary_service.wait_until_has_value"
-        ) as mock_wait:
+        with patch("connectlang_rpa.services.vocabulary_service.wait_until_has_value") as mock_wait:
             service.wait_for_ai_completion()
 
         mock_wait.assert_called_once_with(
@@ -297,33 +299,33 @@ class TestWaitForAiCompletion:
         )
 
     def test_error_propagates_when_field_remains_empty(self) -> None:
-        service, page, settings = _make_service()
+        service, _page, _settings = _make_service()
         service._locators = MagicMock()
         original = BrowserActionError(
             "'AI generated translation' was visible but remained empty after 10000ms"
         )
 
-        with patch(
-            "connectlang_rpa.services.vocabulary_service.wait_until_has_value",
-            side_effect=original,
+        with (
+            patch(
+                "connectlang_rpa.services.vocabulary_service.wait_until_has_value",
+                side_effect=original,
+            ),
+            pytest.raises(BrowserActionError) as exc_info,
         ):
-            with pytest.raises(BrowserActionError) as exc_info:
-                service.wait_for_ai_completion()
+            service.wait_for_ai_completion()
 
         assert exc_info.value is original
 
 
 class TestSubmitWord:
     def test_validates_ai_translation_before_click(self) -> None:
-        service, page, settings = _make_service()
+        service, _page, settings = _make_service()
         translation_locator = MagicMock()
         service._locators = MagicMock()
         service._locators.ai_filled_translation = translation_locator
 
         with (
-            patch(
-                "connectlang_rpa.services.vocabulary_service.wait_until_has_value"
-            ) as mock_wait,
+            patch("connectlang_rpa.services.vocabulary_service.wait_until_has_value") as mock_wait,
             patch("connectlang_rpa.services.vocabulary_service.safe_click"),
             patch("connectlang_rpa.services.vocabulary_service.wait_until_visible"),
         ):
@@ -336,7 +338,7 @@ class TestSubmitWord:
         )
 
     def test_calls_safe_click_on_submit_button(self) -> None:
-        service, page, settings = _make_service()
+        service, _page, settings = _make_service()
         submit_locator = MagicMock()
         service._locators = MagicMock()
         service._locators.submit_button = submit_locator
@@ -355,7 +357,7 @@ class TestSubmitWord:
         )
 
     def test_waits_for_success_message_after_click(self) -> None:
-        service, page, settings = _make_service()
+        service, _page, settings = _make_service()
         success_locator = MagicMock()
         service._locators = MagicMock()
         service._locators.success_message = success_locator
@@ -363,9 +365,7 @@ class TestSubmitWord:
         with (
             patch("connectlang_rpa.services.vocabulary_service.wait_until_has_value"),
             patch("connectlang_rpa.services.vocabulary_service.safe_click"),
-            patch(
-                "connectlang_rpa.services.vocabulary_service.wait_until_visible"
-            ) as mock_visible,
+            patch("connectlang_rpa.services.vocabulary_service.wait_until_visible") as mock_visible,
         ):
             service.submit_word()
 
@@ -376,23 +376,25 @@ class TestSubmitWord:
         )
 
     def test_error_propagates_if_ai_translation_empty_before_submit(self) -> None:
-        service, page, settings = _make_service()
+        service, _page, _settings = _make_service()
         service._locators = MagicMock()
         original = BrowserActionError(
             "'AI generated translation before submit' was visible but remained empty after 10000ms"
         )
 
-        with patch(
-            "connectlang_rpa.services.vocabulary_service.wait_until_has_value",
-            side_effect=original,
+        with (
+            patch(
+                "connectlang_rpa.services.vocabulary_service.wait_until_has_value",
+                side_effect=original,
+            ),
+            pytest.raises(BrowserActionError) as exc_info,
         ):
-            with pytest.raises(BrowserActionError) as exc_info:
-                service.submit_word()
+            service.submit_word()
 
         assert exc_info.value is original
 
     def test_error_propagates_if_submit_click_fails(self) -> None:
-        service, page, settings = _make_service()
+        service, _page, _settings = _make_service()
         service._locators = MagicMock()
         original = BrowserActionError("Failed to click 'submit word button'")
 
@@ -402,14 +404,14 @@ class TestSubmitWord:
                 "connectlang_rpa.services.vocabulary_service.safe_click",
                 side_effect=original,
             ),
+            pytest.raises(BrowserActionError) as exc_info,
         ):
-            with pytest.raises(BrowserActionError) as exc_info:
-                service.submit_word()
+            service.submit_word()
 
         assert exc_info.value is original
 
     def test_error_propagates_if_success_message_not_visible(self) -> None:
-        service, page, settings = _make_service()
+        service, _page, _settings = _make_service()
         service._locators = MagicMock()
         original = BrowserActionError(
             "Timed out waiting for 'word submission success message' to become visible"
@@ -422,21 +424,21 @@ class TestSubmitWord:
                 "connectlang_rpa.services.vocabulary_service.wait_until_visible",
                 side_effect=original,
             ),
+            pytest.raises(BrowserActionError) as exc_info,
         ):
-            with pytest.raises(BrowserActionError) as exc_info:
-                service.submit_word()
+            service.submit_word()
 
         assert exc_info.value is original
 
 
 class TestAddWord:
     def test_orchestrates_all_steps_in_order(self) -> None:
-        service, page, settings = _make_service()
+        service, _page, _settings = _make_service()
         entry = WordEntry(text="Haus", entry_type="word")
 
         call_order: list[str] = []
 
-        def _record(name: str):  # noqa: ANN202
+        def _record(name: str):
             return lambda *_: call_order.append(name)
 
         service.go_to_vocabulary_page = MagicMock(side_effect=_record("go_to_vocabulary_page"))

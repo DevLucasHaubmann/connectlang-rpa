@@ -25,14 +25,21 @@ line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B", "C4", "PTH"]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "PTH", "SIM", "RUF"]
 ignore = []
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
 
 [tool.mypy]
 python_version = "3.12"
 strict = true
 ignore_missing_imports = true
 exclude = ["tests/"]
+show_error_codes = true
+pretty = true
+plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

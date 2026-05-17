@@ -73,7 +73,7 @@ def test_wait_until_has_value_calls_to_have_value_with_nonempty_pattern() -> Non
         wait_until_has_value(locator, "translation field", timeout_ms=5_000)
     mock_expect.assert_called_once_with(locator)
     assertion.to_have_value.assert_called_once()
-    args, kwargs = assertion.to_have_value.call_args
+    _args, kwargs = assertion.to_have_value.call_args
     assert kwargs.get("timeout") == 5_000
 
 
