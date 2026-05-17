@@ -234,11 +234,19 @@ class TestSelectLanguages:
 
 
 class TestTriggerAiFill:
+    def _make_idle_locators(self) -> MagicMock:
+        """Return locators configured to report AI as not active."""
+        locators = MagicMock()
+        locators.ai_fill_button.is_visible.return_value = True
+        locators.ai_fill_button.is_enabled.return_value = True
+        locators.ai_filled_translation.is_visible.return_value = True
+        locators.ai_filled_translation.input_value.return_value = ""
+        return locators
+
     def test_calls_safe_click_on_ai_fill_button(self) -> None:
         service, page, settings = _make_service()
-        ai_locator = MagicMock()
-        service._locators = MagicMock()
-        service._locators.ai_fill_button = ai_locator
+        service._locators = self._make_idle_locators()
+        ai_locator = service._locators.ai_fill_button
 
         with patch("connectlang_rpa.services.vocabulary_service.safe_click") as mock_click:
             service.trigger_ai_fill()
@@ -248,6 +256,26 @@ class TestTriggerAiFill:
             context="AI fill button",
             timeout_ms=settings.default_timeout_ms,
         )
+
+    def test_skips_click_when_ai_button_is_disabled(self) -> None:
+        service, _page, _settings = _make_service()
+        service._locators = self._make_idle_locators()
+        service._locators.ai_fill_button.is_enabled.return_value = False
+
+        with patch("connectlang_rpa.services.vocabulary_service.safe_click") as mock_click:
+            service.trigger_ai_fill()
+
+        mock_click.assert_not_called()
+
+    def test_skips_click_when_translation_already_filled(self) -> None:
+        service, _page, _settings = _make_service()
+        service._locators = self._make_idle_locators()
+        service._locators.ai_filled_translation.input_value.return_value = "some translation"
+
+        with patch("connectlang_rpa.services.vocabulary_service.safe_click") as mock_click:
+            service.trigger_ai_fill()
+
+        mock_click.assert_not_called()
 
 
 class TestWaitForAiCompletion:

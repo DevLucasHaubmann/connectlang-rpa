@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import Page
 
 from connectlang_rpa.actions.browser_actions import (
+    BrowserActionError,
     safe_click,
     safe_fill,
     safe_select_combobox,
@@ -12,6 +14,7 @@ from connectlang_rpa.actions.browser_actions import (
 from connectlang_rpa.config.settings import Settings
 from connectlang_rpa.locators.vocabulary_locators import VocabularyLocators
 from connectlang_rpa.models.word_entry import WordEntry
+from connectlang_rpa.utils.retry import transient_retry
 
 
 class VocabularyService:
@@ -22,13 +25,18 @@ class VocabularyService:
         self._settings = settings
         self._locators = VocabularyLocators(page)
 
+    @transient_retry
     def go_to_vocabulary_page(self) -> None:
-        self._page.goto(
-            self._settings.target_url,
-            timeout=self._settings.default_timeout_ms,
-            wait_until="domcontentloaded",
-        )
+        try:
+            self._page.goto(
+                self._settings.target_url,
+                timeout=self._settings.default_timeout_ms,
+                wait_until="domcontentloaded",
+            )
+        except PlaywrightError as exc:
+            raise BrowserActionError(f"Failed to navigate to vocabulary page: {exc}") from exc
 
+    @transient_retry
     def open_new_word_form(self) -> None:
         safe_click(
             self._locators.new_word_button,
@@ -71,13 +79,35 @@ class VocabularyService:
             timeout_ms=self._settings.default_timeout_ms,
         )
 
+    def _is_ai_fill_already_triggered(self) -> bool:
+        """Return True if the AI fill was already triggered (in progress or completed).
+
+        Prevents duplicate clicks when trigger_ai_fill is retried.
+        - Button disabled → AI is generating (in progress).
+        - Translation field has a value → AI already completed.
+
+        Does NOT catch PlaywrightError: if a visible element fails input_value(),
+        that is a real browser error and must propagate, not be silenced.
+        """
+        button = self._locators.ai_fill_button
+        if button.is_visible() and not button.is_enabled():
+            return True
+        translation = self._locators.ai_filled_translation
+        if translation.is_visible():
+            return bool(translation.input_value())
+        return False
+
+    @transient_retry
     def trigger_ai_fill(self) -> None:
+        if self._is_ai_fill_already_triggered():
+            return
         safe_click(
             self._locators.ai_fill_button,
             context="AI fill button",
             timeout_ms=self._settings.default_timeout_ms,
         )
 
+    @transient_retry
     def wait_for_ai_completion(self) -> None:
         wait_until_has_value(
             self._locators.ai_filled_translation,
