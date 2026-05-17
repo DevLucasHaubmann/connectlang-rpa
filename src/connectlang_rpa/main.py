@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import sys
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
 
 import structlog
 
@@ -21,6 +22,15 @@ class WordResult:
     error: str | None = None
 
 
+@dataclass(frozen=True)
+class ExecutionSummary:
+    total: int
+    successes: int
+    failures: int
+    elapsed_seconds: float
+    failed_results: list[WordResult] = field(default_factory=list)
+
+
 def _process_word(service: VocabularyService, entry: WordEntry) -> WordResult:
     try:
         service.add_word(entry)
@@ -31,21 +41,34 @@ def _process_word(service: VocabularyService, entry: WordEntry) -> WordResult:
         return WordResult(word=entry.text, success=False, error=str(exc))
 
 
-def _print_summary(results: list[WordResult]) -> None:
-    total = len(results)
-    successes = sum(1 for r in results if r.success)
-    failures = total - successes
+def _build_summary(results: list[WordResult], elapsed: float) -> ExecutionSummary:
+    successes = 0
+    failed: list[WordResult] = []
+    for r in results:
+        if r.success:
+            successes += 1
+        else:
+            failed.append(r)
+    return ExecutionSummary(
+        total=len(results),
+        successes=successes,
+        failures=len(failed),
+        elapsed_seconds=elapsed,
+        failed_results=failed,
+    )
 
-    print("\n--- Run Summary ---")
-    print(f"Total:    {total}")
-    print(f"Success:  {successes}")
-    print(f"Failures: {failures}")
 
-    if failures:
-        print("\nFailed words:")
-        for r in results:
-            if not r.success:
-                print(f"  - {r.word}: {r.error}")
+def _print_execution_report(summary: ExecutionSummary) -> None:
+    print("\nExecution completed")
+    print(f"Total:    {summary.total}")
+    print(f"Successes: {summary.successes}")
+    print(f"Failures: {summary.failures}")
+    print(f"Elapsed:  {summary.elapsed_seconds:.2f}s")
+
+    if summary.failed_results:
+        print("\nFailures:")
+        for r in summary.failed_results:
+            print(f"  - {r.word}: {r.error}")
 
 
 def run() -> list[WordResult]:
@@ -71,8 +94,11 @@ def run() -> list[WordResult]:
 
 
 def main() -> None:
+    start = time.perf_counter()
     results = run()
-    _print_summary(results)
+    elapsed = time.perf_counter() - start
+    summary = _build_summary(results, elapsed)
+    _print_execution_report(summary)
 
 
 if __name__ == "__main__":
