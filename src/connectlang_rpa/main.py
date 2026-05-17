@@ -14,7 +14,7 @@ from connectlang_rpa.exceptions import SessionExpiredError
 from connectlang_rpa.models.word_entry import WordEntry
 from connectlang_rpa.services.vocabulary_service import VocabularyService
 from connectlang_rpa.services.word_loader import load_word_entries
-from connectlang_rpa.utils.logger import configure_logging
+from connectlang_rpa.utils.logger import build_run_log_path, configure_logging
 from connectlang_rpa.utils.screenshots import capture_failure_screenshot
 
 log = structlog.get_logger(__name__)
@@ -35,6 +35,7 @@ class ExecutionSummary:
     failures: int
     elapsed_seconds: float
     failed_results: list[WordResult] = field(default_factory=list)
+    log_file_path: Path | None = None
 
 
 def _process_word(service: VocabularyService, entry: WordEntry, page: Page) -> WordResult:
@@ -57,7 +58,11 @@ def _process_word(service: VocabularyService, entry: WordEntry, page: Page) -> W
         )
 
 
-def _build_summary(results: list[WordResult], elapsed: float) -> ExecutionSummary:
+def _build_summary(
+    results: list[WordResult],
+    elapsed: float,
+    log_file_path: Path | None = None,
+) -> ExecutionSummary:
     successes = 0
     failed: list[WordResult] = []
     for r in results:
@@ -71,6 +76,7 @@ def _build_summary(results: list[WordResult], elapsed: float) -> ExecutionSummar
         failures=len(failed),
         elapsed_seconds=elapsed,
         failed_results=failed,
+        log_file_path=log_file_path,
     )
 
 
@@ -80,6 +86,9 @@ def _print_execution_report(summary: ExecutionSummary) -> None:
     print(f"Successes: {summary.successes}")
     print(f"Failures: {summary.failures}")
     print(f"Elapsed:  {summary.elapsed_seconds:.2f}s")
+
+    if summary.log_file_path is not None:
+        print(f"Log file: {summary.log_file_path}")
 
     if summary.failed_results:
         print("\nFailures:")
@@ -116,11 +125,12 @@ def run() -> list[WordResult]:
 
 
 def main() -> None:
-    configure_logging()
+    log_file = build_run_log_path()
+    configure_logging(log_file=log_file)
     start = time.perf_counter()
     results = run()
     elapsed = time.perf_counter() - start
-    summary = _build_summary(results, elapsed)
+    summary = _build_summary(results, elapsed, log_file_path=log_file)
     log.info(
         "execution_finished",
         total=summary.total,
