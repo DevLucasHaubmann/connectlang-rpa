@@ -9,7 +9,7 @@ from connectlang_rpa.actions.browser_actions import (
     safe_fill,
     safe_select_combobox,
     wait_until_has_value,
-    wait_until_visible,
+    wait_until_hidden,
 )
 from connectlang_rpa.config.settings import Settings
 from connectlang_rpa.exceptions import SessionExpiredError
@@ -80,16 +80,11 @@ class VocabularyService:
         )
 
     def fill_word_entry(self, word_entry: WordEntry) -> None:
+        # "Wort" is the default type — only switch when sentence is explicitly required.
         if word_entry.entry_type == "sentence":
             safe_click(
                 self._locators.sentence_type_option,
                 context="sentence type option",
-                timeout_ms=self._settings.default_timeout_ms,
-            )
-        else:
-            safe_click(
-                self._locators.word_type_option,
-                context="word type option",
                 timeout_ms=self._settings.default_timeout_ms,
             )
 
@@ -150,6 +145,19 @@ class VocabularyService:
             timeout_ms=self._settings.default_timeout_ms,
         )
 
+    def wait_for_submission_completion(self) -> None:
+        """Wait for the creation form to close after submitting a word.
+
+        The ConnectLang UI does not expose a role="status" message after saving.
+        The reliable signal is the submit button becoming hidden, which happens
+        when the modal/form closes on success.
+        """
+        wait_until_hidden(
+            self._locators.submit_button,
+            context="submit button after word submission",
+            timeout_ms=self._settings.default_timeout_ms,
+        )
+
     def submit_word(self) -> None:
         wait_until_has_value(
             self._locators.ai_filled_translation,
@@ -161,11 +169,7 @@ class VocabularyService:
             context="submit word button",
             timeout_ms=self._settings.default_timeout_ms,
         )
-        wait_until_visible(
-            self._locators.success_message,
-            context="word submission success message",
-            timeout_ms=self._settings.default_timeout_ms,
-        )
+        self.wait_for_submission_completion()
 
     def add_word(self, word_entry: WordEntry) -> None:
         self.go_to_vocabulary_page()

@@ -77,12 +77,10 @@ class TestOpenNewWordForm:
 
 
 class TestFillWordEntry:
-    def test_word_type_clicks_word_option_and_fills_text(self) -> None:
+    def test_word_type_skips_type_click_and_fills_text(self) -> None:
         service, _page, settings = _make_service()
-        word_locator = MagicMock()
         input_locator = MagicMock()
         service._locators = MagicMock()
-        service._locators.word_type_option = word_locator
         service._locators.word_input = input_locator
 
         entry = WordEntry(text="Haus", entry_type="word")
@@ -93,11 +91,7 @@ class TestFillWordEntry:
         ):
             service.fill_word_entry(entry)
 
-        mock_click.assert_called_once_with(
-            word_locator,
-            context="word type option",
-            timeout_ms=settings.default_timeout_ms,
-        )
+        mock_click.assert_not_called()
         mock_fill.assert_called_once_with(
             input_locator,
             "Haus",
@@ -317,17 +311,52 @@ class TestWaitForAiCompletion:
         assert exc_info.value is original
 
 
+class TestWaitForSubmissionCompletion:
+    def test_calls_wait_until_hidden_on_submit_button(self) -> None:
+        service, _page, settings = _make_service()
+        submit_locator = MagicMock()
+        service._locators = MagicMock()
+        service._locators.submit_button = submit_locator
+
+        with patch("connectlang_rpa.services.vocabulary_service.wait_until_hidden") as mock_hidden:
+            service.wait_for_submission_completion()
+
+        mock_hidden.assert_called_once_with(
+            submit_locator,
+            context="submit button after word submission",
+            timeout_ms=settings.default_timeout_ms,
+        )
+
+    def test_error_propagates_if_form_does_not_close(self) -> None:
+        service, _page, _settings = _make_service()
+        service._locators = MagicMock()
+        original = BrowserActionError(
+            "Timed out waiting for 'submit button after word submission' to become hidden"
+        )
+
+        with (
+            patch(
+                "connectlang_rpa.services.vocabulary_service.wait_until_hidden",
+                side_effect=original,
+            ),
+            pytest.raises(BrowserActionError) as exc_info,
+        ):
+            service.wait_for_submission_completion()
+
+        assert exc_info.value is original
+
+
 class TestSubmitWord:
     def test_validates_ai_translation_before_click(self) -> None:
         service, _page, settings = _make_service()
         translation_locator = MagicMock()
         service._locators = MagicMock()
         service._locators.ai_filled_translation = translation_locator
+        service.wait_for_submission_completion = MagicMock()
 
         with (
             patch("connectlang_rpa.services.vocabulary_service.wait_until_has_value") as mock_wait,
             patch("connectlang_rpa.services.vocabulary_service.safe_click"),
-            patch("connectlang_rpa.services.vocabulary_service.wait_until_visible"),
         ):
             service.submit_word()
 
@@ -342,11 +371,11 @@ class TestSubmitWord:
         submit_locator = MagicMock()
         service._locators = MagicMock()
         service._locators.submit_button = submit_locator
+        service.wait_for_submission_completion = MagicMock()
 
         with (
             patch("connectlang_rpa.services.vocabulary_service.wait_until_has_value"),
             patch("connectlang_rpa.services.vocabulary_service.safe_click") as mock_click,
-            patch("connectlang_rpa.services.vocabulary_service.wait_until_visible"),
         ):
             service.submit_word()
 
@@ -356,24 +385,18 @@ class TestSubmitWord:
             timeout_ms=settings.default_timeout_ms,
         )
 
-    def test_waits_for_success_message_after_click(self) -> None:
-        service, _page, settings = _make_service()
-        success_locator = MagicMock()
+    def test_calls_wait_for_submission_completion_after_click(self) -> None:
+        service, _page, _settings = _make_service()
         service._locators = MagicMock()
-        service._locators.success_message = success_locator
+        service.wait_for_submission_completion = MagicMock()
 
         with (
             patch("connectlang_rpa.services.vocabulary_service.wait_until_has_value"),
             patch("connectlang_rpa.services.vocabulary_service.safe_click"),
-            patch("connectlang_rpa.services.vocabulary_service.wait_until_visible") as mock_visible,
         ):
             service.submit_word()
 
-        mock_visible.assert_called_once_with(
-            success_locator,
-            context="word submission success message",
-            timeout_ms=settings.default_timeout_ms,
-        )
+        service.wait_for_submission_completion.assert_called_once()
 
     def test_error_propagates_if_ai_translation_empty_before_submit(self) -> None:
         service, _page, _settings = _make_service()
@@ -396,6 +419,7 @@ class TestSubmitWord:
     def test_error_propagates_if_submit_click_fails(self) -> None:
         service, _page, _settings = _make_service()
         service._locators = MagicMock()
+        service.wait_for_submission_completion = MagicMock()
         original = BrowserActionError("Failed to click 'submit word button'")
 
         with (
@@ -410,20 +434,17 @@ class TestSubmitWord:
 
         assert exc_info.value is original
 
-    def test_error_propagates_if_success_message_not_visible(self) -> None:
+    def test_error_propagates_if_form_does_not_close_after_submit(self) -> None:
         service, _page, _settings = _make_service()
         service._locators = MagicMock()
         original = BrowserActionError(
-            "Timed out waiting for 'word submission success message' to become visible"
+            "Timed out waiting for 'submit button after word submission' to become hidden"
         )
+        service.wait_for_submission_completion = MagicMock(side_effect=original)
 
         with (
             patch("connectlang_rpa.services.vocabulary_service.wait_until_has_value"),
             patch("connectlang_rpa.services.vocabulary_service.safe_click"),
-            patch(
-                "connectlang_rpa.services.vocabulary_service.wait_until_visible",
-                side_effect=original,
-            ),
             pytest.raises(BrowserActionError) as exc_info,
         ):
             service.submit_word()

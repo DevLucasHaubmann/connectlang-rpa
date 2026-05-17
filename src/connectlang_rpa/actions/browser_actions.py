@@ -24,6 +24,18 @@ def wait_until_visible(
         raise BrowserActionError(f"Timed out waiting for '{context}' to become visible") from exc
 
 
+def wait_until_hidden(
+    locator: Locator,
+    context: str,
+    timeout_ms: int | None = None,
+) -> None:
+    timeout = timeout_ms if timeout_ms is not None else _DEFAULT_TIMEOUT_MS
+    try:
+        locator.wait_for(state="hidden", timeout=timeout)
+    except PlaywrightError as exc:
+        raise BrowserActionError(f"Timed out waiting for '{context}' to become hidden") from exc
+
+
 def wait_until_has_value(
     locator: Locator,
     context: str,
@@ -109,17 +121,19 @@ def safe_select_combobox(
 ) -> None:
     """Select a value from a combobox, with fallback for custom dropdown components.
 
-    Tries select_option first (native <select>). If that fails, clicks the combobox
-    to open it and then clicks the matching option role — for custom combobox widgets.
+    Tries select_option(label=value) first — scoped to the specific <select> element,
+    matching by visible label text. If that fails (custom widget), clicks the combobox
+    to open it and then clicks the matching option within the locator's subtree.
     """
     timeout = timeout_ms if timeout_ms is not None else _DEFAULT_TIMEOUT_MS
     wait_until_enabled(locator, context, timeout_ms)
+    select_option_exc: PlaywrightError | None = None
     try:
-        locator.select_option(value, timeout=timeout)
+        locator.select_option(label=value, timeout=timeout)
         return
-    except PlaywrightError:
-        pass
-    _click_combobox_option(locator, value, context, timeout)
+    except PlaywrightError as exc:
+        select_option_exc = exc
+    _click_combobox_option(locator, value, context, timeout, select_option_exc)
 
 
 def _click_combobox_option(
@@ -127,9 +141,11 @@ def _click_combobox_option(
     value: str,
     context: str,
     timeout: int,
+    select_option_exc: PlaywrightError | None = None,
 ) -> None:
     try:
         locator.click(timeout=timeout)
-        locator.page.get_by_role("option", name=value).click(timeout=timeout)
+        locator.get_by_role("option", name=value).click(timeout=timeout)
     except PlaywrightError as exc:
-        raise BrowserActionError(f"Failed to select '{value}' on '{context}'") from exc
+        cause: BaseException = exc if select_option_exc is None else select_option_exc
+        raise BrowserActionError(f"Failed to select '{value}' on '{context}'") from cause

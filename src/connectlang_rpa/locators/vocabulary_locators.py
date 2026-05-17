@@ -8,6 +8,12 @@ _SUBMIT_BUTTON = "Zu meinen Wörtern hinzufügen"
 _WORD_OPTION = "Wort"
 _SENTENCE_OPTION = "Satz"
 
+# The "Wort hinzufügen" form renders exactly two native <select> elements.
+# get_by_label("SPRACHE") is prohibited here: it resolves to the global
+# <button aria-label="Sprache"> in the platform header, not the form select.
+_SOURCE_LANGUAGE_SELECT_INDEX = 0
+_TRANSLATION_LANGUAGE_SELECT_INDEX = 1
+
 
 class VocabularyLocators:
     """Centralizes locators for the vocabulary entry page.
@@ -24,9 +30,8 @@ class VocabularyLocators:
 
     @property
     def word_input(self) -> Locator:
-        # Fallback: no stable role/label confirmed yet — using placeholder as best guess.
-        # TODO: verify against live DOM; replace if a label or aria-label is present.
-        return self._page.get_by_placeholder("Wort oder Phrase eingeben")
+        # First textbox in the "Wort hinzufügen" form — confirmed via manual inspection.
+        return self._page.get_by_role("textbox").first
 
     @property
     def word_type_option(self) -> Locator:
@@ -38,13 +43,11 @@ class VocabularyLocators:
 
     @property
     def source_language_select(self) -> Locator:
-        # TODO: verify label text against live DOM; combobox may carry a different accessible name.
-        return self._page.get_by_role("combobox", name="Sprache des Wortes")
+        return self._page.locator("select").nth(_SOURCE_LANGUAGE_SELECT_INDEX)
 
     @property
     def translation_language_select(self) -> Locator:
-        # TODO: verify label text against live DOM.
-        return self._page.get_by_role("combobox", name="Sprache der Übersetzung")
+        return self._page.locator("select").nth(_TRANSLATION_LANGUAGE_SELECT_INDEX)
 
     @property
     def ai_fill_button(self) -> Locator:
@@ -63,8 +66,3 @@ class VocabularyLocators:
     @property
     def submit_button(self) -> Locator:
         return self._page.get_by_role("button", name=_SUBMIT_BUTTON)
-
-    @property
-    def success_message(self) -> Locator:
-        # TODO: confirm exact text/role after a successful submission.
-        return self._page.get_by_role("status")
