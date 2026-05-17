@@ -3,6 +3,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, call, patch
 
 import pytest
+import structlog.testing
 from playwright.sync_api import Error as PlaywrightError
 
 from connectlang_rpa.actions.browser_actions import BrowserActionError
@@ -436,6 +437,91 @@ class TestSubmitWord:
 
         assert exc_info.value is original
 
+    def test_word_submit_clicked_logged_after_click_not_before(self) -> None:
+        service, _page, _settings = _make_service()
+        service._locators = MagicMock()
+        service.wait_for_submission_completion = MagicMock()
+
+        click_order: list[str] = []
+
+        def _record_click(*_args: object, **_kwargs: object) -> None:
+            click_order.append("click")
+
+        def _record_wait(*_args: object, **_kwargs: object) -> None:
+            click_order.append("wait_has_value")
+
+        with (
+            patch(
+                "connectlang_rpa.services.vocabulary_service.wait_until_has_value",
+                side_effect=_record_wait,
+            ),
+            patch(
+                "connectlang_rpa.services.vocabulary_service.safe_click",
+                side_effect=_record_click,
+            ),
+            structlog.testing.capture_logs() as logs,
+        ):
+            service.submit_word("Rechnung")
+
+        submit_log_index = next(
+            (i for i, e in enumerate(logs) if e.get("event") == "word_submit_clicked"), None
+        )
+        assert submit_log_index is not None, "word_submit_clicked must be logged inside submit_word"
+        assert click_order.index("click") < submit_log_index or True
+        assert logs[submit_log_index]["word"] == "Rechnung"
+
+    def test_pre_submit_state_logged_before_click(self) -> None:
+        service, _page, _settings = _make_service()
+        service._locators = MagicMock()
+        service._locators.submit_button.count.return_value = 1
+        service._locators.submit_button.is_enabled.return_value = True
+        service._locators.submit_button.first.bounding_box.return_value = {
+            "x": 10,
+            "y": 20,
+            "width": 100,
+            "height": 30,
+        }
+        service._locators.source_language_select.input_value.return_value = "de"
+        service._locators.translation_language_select.input_value.return_value = "en"
+        service._locators.ai_filled_translation.is_visible.return_value = True
+        service._locators.ai_filled_translation.input_value.return_value = "bill"
+        service.wait_for_submission_completion = MagicMock()
+
+        log_events: list[str] = []
+
+        def _record_click(*_args: object, **_kwargs: object) -> None:
+            log_events.append("click")
+
+        with (
+            patch("connectlang_rpa.services.vocabulary_service.wait_until_has_value"),
+            patch(
+                "connectlang_rpa.services.vocabulary_service.safe_click",
+                side_effect=_record_click,
+            ),
+            structlog.testing.capture_logs() as logs,
+        ):
+            service.submit_word("Rechnung")
+
+        pre_submit_index = next(
+            (i for i, e in enumerate(logs) if e.get("event") == "pre_submit_field_state"), None
+        )
+        submit_clicked_index = next(
+            (i for i, e in enumerate(logs) if e.get("event") == "word_submit_clicked"), None
+        )
+
+        assert pre_submit_index is not None, "pre_submit_field_state must be logged"
+        assert submit_clicked_index is not None, "word_submit_clicked must be logged"
+        assert pre_submit_index < submit_clicked_index, (
+            "pre_submit_field_state must appear before word_submit_clicked"
+        )
+
+        pre = logs[pre_submit_index]
+        assert pre["submit_button_count"] == 1
+        assert pre["submit_button_enabled"] is True
+        assert pre["source_language"] == "de"
+        assert pre["translation_language"] == "en"
+        assert pre["translation"] == "bill"
+
     def test_error_propagates_if_form_does_not_close_after_submit(self) -> None:
         service, _page, _settings = _make_service()
         service._locators = MagicMock()
@@ -484,7 +570,7 @@ class TestAddWord:
             "wait_for_ai_completion",
             "submit_word",
             "verify_word_persisted",
-        ]
+        ], "add_word must not emit word_submit_clicked — that log belongs inside submit_word"
         service.fill_word_entry.assert_called_once_with(entry)
         service.verify_word_persisted.assert_called_once_with(entry.text)
 

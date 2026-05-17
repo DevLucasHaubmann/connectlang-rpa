@@ -177,14 +177,31 @@ class VocabularyService:
             translation_value = "<error reading>"
 
         submit_enabled = False
-        with contextlib.suppress(PlaywrightError):
-            submit_enabled = self._locators.submit_button.is_enabled()
+        submit_count = 0
+        submit_bbox: object = None
+        with contextlib.suppress(Exception):
+            btn = self._locators.submit_button
+            submit_count = btn.count()
+            submit_enabled = btn.is_enabled()
+            if submit_count > 0:
+                submit_bbox = btn.first.bounding_box()
+
+        source_lang: str = "<unknown>"
+        translation_lang: str = "<unknown>"
+        with contextlib.suppress(Exception):
+            source_lang = self._locators.source_language_select.input_value()
+        with contextlib.suppress(Exception):
+            translation_lang = self._locators.translation_language_select.input_value()
 
         log.info(
             "pre_submit_field_state",
             word=word_text,
             translation=translation_value,
+            source_language=source_lang,
+            translation_language=translation_lang,
+            submit_button_count=submit_count,
             submit_button_enabled=submit_enabled,
+            submit_button_bbox=submit_bbox,
             url=self._page.url,
         )
 
@@ -229,6 +246,7 @@ class VocabularyService:
                 context="submit word button",
                 timeout_ms=self._settings.default_timeout_ms,
             )
+            log.info("word_submit_clicked", word=word_text)
             self.wait_for_submission_completion()
         finally:
             self._page.remove_listener("response", _on_response)
@@ -284,7 +302,6 @@ class VocabularyService:
         self.select_languages()
         self.trigger_ai_fill()
         self.wait_for_ai_completion()
-        log.info("word_submit_clicked", word=word_entry.text)
         self.submit_word(word_entry.text)
         log.info("word_submit_feedback_received", word=word_entry.text)
         self.verify_word_persisted(word_entry.text)
