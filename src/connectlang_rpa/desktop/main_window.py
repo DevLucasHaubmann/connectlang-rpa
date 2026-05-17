@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import contextlib
 from enum import Enum, auto
+from pathlib import Path
 
 import customtkinter as ctk
 
 from connectlang_rpa.desktop import theme
+from connectlang_rpa.desktop.services.process_runner import ProcessRunner
 from connectlang_rpa.desktop.widgets.word_input_panel import WordInputPanel
+
+_PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
+_BOT_COMMAND = ["uv", "run", "connectlang-rpa"]
 
 
 class AppState(Enum):
@@ -37,6 +43,7 @@ class MainWindow(ctk.CTk):  # type: ignore[misc]  # CTk has no type stubs
     def __init__(self) -> None:
         super().__init__()
         self._state = AppState.IDLE
+        self._runner: ProcessRunner | None = None
         self._configure_window()
         self._build_layout()
         self._apply_state(self._state)
@@ -189,13 +196,13 @@ class MainWindow(ctk.CTk):  # type: ignore[misc]  # CTk has no type stubs
         )
         self._progress_label.grid(row=1, column=0, sticky="w")
 
-        placeholder = ctk.CTkLabel(
+        self._exec_status_label = ctk.CTkLabel(
             center,
-            text="Painel de execução\n(Task 12.4)",
+            text="Aguardando execução",
             font=theme.FONT_BODY,
             text_color=theme.TEXT_DISABLED,
         )
-        placeholder.grid(row=2, column=0, pady=theme.PAD_LG)
+        self._exec_status_label.grid(row=2, column=0, pady=theme.PAD_LG)
 
         self._btn_run = ctk.CTkButton(
             frame,
@@ -208,6 +215,7 @@ class MainWindow(ctk.CTk):  # type: ignore[misc]  # CTk has no type stubs
             text_color=theme.TEXT_PRIMARY,
             corner_radius=theme.CORNER_RADIUS,
             state="disabled",
+            command=self._on_run_clicked,
         )
         self._btn_run.grid(row=2, column=0, pady=(theme.PAD_SM, theme.PAD_MD))
 
@@ -261,8 +269,59 @@ class MainWindow(ctk.CTk):  # type: ignore[misc]  # CTk has no type stubs
     # ------------------------------------------------------------------
 
     def _on_word_list_saved(self, words: list[str]) -> None:
+        if self._state == AppState.RUNNING:
+            return
         has_words = len(words) > 0
         self._btn_run.configure(state="normal" if has_words else "disabled")
+
+    # ------------------------------------------------------------------
+    # Run callbacks (called from worker thread — must use after())
+    # ------------------------------------------------------------------
+
+    def _on_run_clicked(self) -> None:
+        self._runner = ProcessRunner(
+            command=_BOT_COMMAND,
+            cwd=_PROJECT_ROOT,
+            on_started=lambda: self.after(0, self._handle_started),
+            on_finished=lambda code: self.after(0, self._handle_finished, code),
+            on_error=lambda exc: self.after(0, self._handle_error, exc),
+        )
+        with contextlib.suppress(RuntimeError):
+            self._runner.start()
+
+    def _handle_started(self) -> None:
+        self.set_state(AppState.RUNNING)
+        self._btn_run.configure(state="disabled")
+        self._word_panel.set_locked(True)
+        self._exec_status_label.configure(
+            text="Executando...", text_color=theme.COLOR_PROCESSING,
+        )
+        self.append_log("▶ Robô iniciado.")
+
+    def _handle_finished(self, returncode: int) -> None:
+        if returncode == 0:
+            self.set_state(AppState.SUCCESS)
+            self._exec_status_label.configure(
+                text=f"Concluído (código {returncode})", text_color=theme.COLOR_SUCCESS,
+            )
+            self.append_log(f"✔ Execução concluída com sucesso (código {returncode}).")
+        else:
+            self.set_state(AppState.ERROR)
+            self._exec_status_label.configure(
+                text=f"Erro (código {returncode})", text_color=theme.COLOR_ERROR,
+            )
+            self.append_log(f"✘ Execução finalizada com erro (código {returncode}).")
+        self._word_panel.set_locked(False)
+        self._btn_run.configure(state="normal")
+
+    def _handle_error(self, exc: Exception) -> None:
+        self.set_state(AppState.ERROR)
+        self._exec_status_label.configure(
+            text="Erro ao iniciar processo", text_color=theme.COLOR_ERROR,
+        )
+        self.append_log(f"✘ Falha ao iniciar robô: {exc}")
+        self._word_panel.set_locked(False)
+        self._btn_run.configure(state="normal")
 
     # ------------------------------------------------------------------
     # State management

@@ -175,6 +175,19 @@ class WordInputPanel(ctk.CTkFrame):  # type: ignore[misc]
             text=f"{len(words)} palavra{'s' if len(words) != 1 else ''}",
         )
 
+    def set_locked(self, locked: bool) -> None:
+        """Disable or re-enable editing controls during robot execution."""
+        state = "disabled" if locked else "normal"
+        self._btn_save.configure(state=state)
+        self._textbox.configure(state=state)
+        if not locked:
+            # restore clear button only when there is content
+            raw = self._textbox.get("1.0", "end")
+            words = svc.parse_lines(raw)
+            self._btn_clear.configure(state="normal" if words else "disabled")
+        else:
+            self._btn_clear.configure(state="disabled")
+
     def _load_existing(self) -> None:
         words = svc.load_words(self._words_path)
         if not words:
