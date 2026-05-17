@@ -5,6 +5,7 @@ from enum import Enum, auto
 import customtkinter as ctk
 
 from connectlang_rpa.desktop import theme
+from connectlang_rpa.desktop.widgets.word_input_panel import WordInputPanel
 
 
 class AppState(Enum):
@@ -132,61 +133,16 @@ class MainWindow(ctk.CTk):  # type: ignore[misc]  # CTk has no type stubs
 
         return frame
 
-    def _build_word_panel(self) -> ctk.CTkFrame:
-        frame = ctk.CTkFrame(
+    def _build_word_panel(self) -> WordInputPanel:
+        return WordInputPanel(
             self,
+            on_list_saved=self._on_word_list_saved,
             fg_color=theme.BG_SECONDARY,
             corner_radius=theme.CORNER_RADIUS,
             border_width=theme.BORDER_WIDTH,
             border_color=theme.BORDER_COLOR,
             width=theme.WORD_PANEL_WIDTH,
         )
-        frame.grid_rowconfigure(1, weight=1)
-        frame.grid_columnconfigure(0, weight=1)
-        frame.grid_propagate(False)
-
-        label = ctk.CTkLabel(
-            frame,
-            text="LISTA DE PALAVRAS",
-            font=theme.FONT_SECTION,
-            text_color=theme.TEXT_SECONDARY,
-        )
-        label.grid(
-            row=0, column=0, padx=theme.PAD_MD,
-            pady=(theme.PAD_MD, theme.PAD_SM), sticky="w",
-        )
-
-        placeholder = ctk.CTkLabel(
-            frame,
-            text="Editor de palavras\n(Task 12.3)",
-            font=theme.FONT_BODY,
-            text_color=theme.TEXT_DISABLED,
-        )
-        placeholder.grid(row=1, column=0, padx=theme.PAD_MD, pady=theme.PAD_MD)
-
-        btn_frame = ctk.CTkFrame(frame, fg_color="transparent")
-        btn_frame.grid(
-            row=2, column=0, padx=theme.PAD_MD,
-            pady=(theme.PAD_SM, theme.PAD_MD), sticky="ew",
-        )
-        btn_frame.grid_columnconfigure(0, weight=1)
-
-        self._btn_clear = ctk.CTkButton(
-            btn_frame,
-            text="Limpar lista",
-            font=theme.FONT_BODY,
-            height=theme.BUTTON_HEIGHT,
-            fg_color=theme.BG_INPUT,
-            hover_color=theme.BG_HOVER,
-            text_color=theme.TEXT_SECONDARY,
-            corner_radius=theme.CORNER_RADIUS,
-            border_width=theme.BORDER_WIDTH,
-            border_color=theme.BORDER_COLOR,
-            state="disabled",
-        )
-        self._btn_clear.grid(row=0, column=0, sticky="ew")
-
-        return frame
 
     def _build_exec_panel(self) -> ctk.CTkFrame:
         frame = ctk.CTkFrame(
@@ -299,6 +255,14 @@ class MainWindow(ctk.CTk):  # type: ignore[misc]  # CTk has no type stubs
         )
 
         return frame
+
+    # ------------------------------------------------------------------
+    # Word list callbacks
+    # ------------------------------------------------------------------
+
+    def _on_word_list_saved(self, words: list[str]) -> None:
+        has_words = len(words) > 0
+        self._btn_run.configure(state="normal" if has_words else "disabled")
 
     # ------------------------------------------------------------------
     # State management
