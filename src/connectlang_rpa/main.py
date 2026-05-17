@@ -3,14 +3,17 @@ from __future__ import annotations
 import sys
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import structlog
+from playwright.sync_api import Page
 
 from connectlang_rpa.config.settings import get_settings
 from connectlang_rpa.core.browser import BrowserManager
 from connectlang_rpa.models.word_entry import WordEntry
 from connectlang_rpa.services.vocabulary_service import VocabularyService
 from connectlang_rpa.services.word_loader import load_word_entries
+from connectlang_rpa.utils.screenshots import capture_failure_screenshot
 
 log = structlog.get_logger(__name__)
 
@@ -20,6 +23,7 @@ class WordResult:
     word: str
     success: bool
     error: str | None = None
+    screenshot_path: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -31,14 +35,17 @@ class ExecutionSummary:
     failed_results: list[WordResult] = field(default_factory=list)
 
 
-def _process_word(service: VocabularyService, entry: WordEntry) -> WordResult:
+def _process_word(service: VocabularyService, entry: WordEntry, page: Page) -> WordResult:
     try:
         service.add_word(entry)
         log.info("word_processed", word=entry.text, status="success")
         return WordResult(word=entry.text, success=True)
     except Exception as exc:
         log.error("word_failed", word=entry.text, error=str(exc), exc_info=True)
-        return WordResult(word=entry.text, success=False, error=str(exc))
+        screenshot = capture_failure_screenshot(page, entry.text)
+        return WordResult(
+            word=entry.text, success=False, error=str(exc), screenshot_path=screenshot
+        )
 
 
 def _build_summary(results: list[WordResult], elapsed: float) -> ExecutionSummary:
@@ -68,7 +75,8 @@ def _print_execution_report(summary: ExecutionSummary) -> None:
     if summary.failed_results:
         print("\nFailures:")
         for r in summary.failed_results:
-            print(f"  - {r.word}: {r.error}")
+            screenshot_info = f" [screenshot: {r.screenshot_path}]" if r.screenshot_path else ""
+            print(f"  - {r.word}: {r.error}{screenshot_info}")
 
 
 def run() -> list[WordResult]:
@@ -87,7 +95,7 @@ def run() -> list[WordResult]:
     with BrowserManager(settings) as browser:
         service = VocabularyService(browser.page, settings)
         for entry in entries:
-            result = _process_word(service, entry)
+            result = _process_word(service, entry, browser.page)
             results.append(result)
 
     return results
