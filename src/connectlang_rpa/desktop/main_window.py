@@ -14,6 +14,7 @@ from connectlang_rpa.desktop.widgets.word_input_panel import WordInputPanel
 
 _PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 _BOT_COMMAND = ["uv", "run", "connectlang-rpa"]
+_ICON_PATH = _PROJECT_ROOT / "assets" / "icon.ico"
 
 
 class AppState(Enum):
@@ -69,6 +70,9 @@ class MainWindow(ctk.CTk):  # type: ignore[misc]  # CTk has no type stubs
         self.configure(fg_color=theme.BG_PRIMARY)
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("dark-blue")
+        if _ICON_PATH.exists():
+            with contextlib.suppress(Exception):
+                self.iconbitmap(str(_ICON_PATH))
 
     # ------------------------------------------------------------------
     # Layout construction
