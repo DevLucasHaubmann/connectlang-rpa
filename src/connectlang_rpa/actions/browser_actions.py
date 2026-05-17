@@ -24,6 +24,18 @@ def wait_until_visible(
         raise BrowserActionError(f"Timed out waiting for '{context}' to become visible") from exc
 
 
+def wait_until_hidden(
+    locator: Locator,
+    context: str,
+    timeout_ms: int | None = None,
+) -> None:
+    timeout = timeout_ms if timeout_ms is not None else _DEFAULT_TIMEOUT_MS
+    try:
+        locator.wait_for(state="hidden", timeout=timeout)
+    except PlaywrightError as exc:
+        raise BrowserActionError(f"Timed out waiting for '{context}' to become hidden") from exc
+
+
 def wait_until_has_value(
     locator: Locator,
     context: str,

@@ -63,22 +63,28 @@ def test_word_input_uses_first_textbox_role() -> None:
     page.get_by_role.assert_called_once_with("textbox")
 
 
-def test_source_language_select_uses_get_by_label() -> None:
+def test_source_language_select_uses_nth_select() -> None:
+    # Must NOT use get_by_label("SPRACHE") — that resolves to the global
+    # platform header button, not the form <select>.
     page = _make_page()
     locators = VocabularyLocators(page)
 
     _ = locators.source_language_select
 
-    page.get_by_label.assert_called_once_with("SPRACHE")
+    page.locator.assert_called_once_with("select")
+    page.locator.return_value.nth.assert_called_once_with(0)
+    page.get_by_label.assert_not_called()
 
 
-def test_translation_language_select_uses_get_by_label() -> None:
+def test_translation_language_select_uses_nth_select() -> None:
     page = _make_page()
     locators = VocabularyLocators(page)
 
     _ = locators.translation_language_select
 
-    page.get_by_label.assert_called_once_with("SPRACHE DER ÜBERSETZUNG")
+    page.locator.assert_called_once_with("select")
+    page.locator.return_value.nth.assert_called_once_with(1)
+    page.get_by_label.assert_not_called()
 
 
 def test_locators_do_not_call_click_or_fill() -> None:
@@ -93,7 +99,10 @@ def test_locators_do_not_call_click_or_fill() -> None:
     _ = locators.source_language_select
     _ = locators.translation_language_select
 
-    for mock_locator in (page.get_by_role.return_value, page.get_by_label.return_value):
+    for mock_locator in (
+        page.get_by_role.return_value,
+        page.locator.return_value.nth.return_value,
+    ):
         mock_locator.click.assert_not_called()
         mock_locator.fill.assert_not_called()
         mock_locator.select_option.assert_not_called()
