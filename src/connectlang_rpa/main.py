@@ -14,6 +14,7 @@ from connectlang_rpa.exceptions import SessionExpiredError
 from connectlang_rpa.models.word_entry import WordEntry
 from connectlang_rpa.services.vocabulary_service import VocabularyService
 from connectlang_rpa.services.word_loader import load_word_entries
+from connectlang_rpa.utils.logger import configure_logging
 from connectlang_rpa.utils.screenshots import capture_failure_screenshot
 
 log = structlog.get_logger(__name__)
@@ -37,13 +38,20 @@ class ExecutionSummary:
 
 
 def _process_word(service: VocabularyService, entry: WordEntry, page: Page) -> WordResult:
+    log.info("word_processing_started", word=entry.text)
     try:
         service.add_word(entry)
-        log.info("word_processed", word=entry.text, status="success")
+        log.info("word_added_successfully", word=entry.text)
         return WordResult(word=entry.text, success=True)
     except Exception as exc:
-        log.error("word_failed", word=entry.text, error=str(exc), exc_info=True)
         screenshot = capture_failure_screenshot(page, entry.text)
+        log.error(
+            "word_failed",
+            word=entry.text,
+            error=str(exc),
+            screenshot_path=str(screenshot) if screenshot else None,
+            exc_info=True,
+        )
         return WordResult(
             word=entry.text, success=False, error=str(exc), screenshot_path=screenshot
         )
@@ -89,7 +97,7 @@ def run() -> list[WordResult]:
         log.error("startup_failed", reason=str(exc))
         sys.exit(f"[ERROR] Could not load word list: {exc}")
 
-    log.info("batch_started", total=len(entries))
+    log.info("execution_started", total=len(entries))
 
     results: list[WordResult] = []
 
@@ -108,10 +116,18 @@ def run() -> list[WordResult]:
 
 
 def main() -> None:
+    configure_logging()
     start = time.perf_counter()
     results = run()
     elapsed = time.perf_counter() - start
     summary = _build_summary(results, elapsed)
+    log.info(
+        "execution_finished",
+        total=summary.total,
+        successes=summary.successes,
+        failures=summary.failures,
+        elapsed_seconds=round(summary.elapsed_seconds, 2),
+    )
     _print_execution_report(summary)
 
 
