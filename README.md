@@ -4,7 +4,7 @@ Automates vocabulary entry on the ConnectLang platform using a real browser and 
 
 ---
 
-## Objetivo
+## Objective
 
 The bot receives a list of German words or phrases and, for each item, navigates to the ConnectLang vocabulary page, opens the new-word form, fills in the text, selects the source and translation languages, triggers the AI auto-fill, waits for completion, and saves the entry — without requiring human interaction after setup.
 
@@ -12,7 +12,7 @@ It does **not** automate login, bypass captcha, or circumvent any site-level sec
 
 ---
 
-## Demonstração do fluxo
+## Flow demonstration
 
 For each entry in the word list, the bot executes the following steps:
 
@@ -30,7 +30,7 @@ At the end of the run, a summary is printed to the terminal and written to a str
 
 ---
 
-## Tecnologias usadas
+## Technologies used
 
 | Tool | Role |
 |---|---|
@@ -46,7 +46,7 @@ At the end of the run, a summary is printed to the terminal and written to a str
 
 ---
 
-## Arquitetura
+## Architecture
 
 ```
 main.py                  ← orchestrator: loads config, starts browser, runs the batch loop
@@ -74,7 +74,7 @@ Key design decisions:
 
 ---
 
-## Por que Playwright e não Selenium
+## Why Playwright instead of Selenium
 
 Playwright was chosen for the following reasons:
 
@@ -87,7 +87,7 @@ Selenium is a solid tool, but Playwright's approach fits this project's requirem
 
 ---
 
-## Estrutura de pastas
+## Folder structure
 
 ```
 connectlang-rpa/
@@ -118,7 +118,7 @@ connectlang-rpa/
 
 ---
 
-## Configuração do ambiente
+## Environment setup
 
 **1. Install dependencies:**
 
@@ -146,11 +146,11 @@ Edit `.env` to match your environment. The defaults work for most setups.
 cp data/words.example.json data/words.json
 ```
 
-Edit `data/words.json` with the words you want to add (see [Como adicionar palavras](#como-adicionar-palavras)).
+Edit `data/words.json` with the words you want to add (see [How to add words](#how-to-add-words)).
 
 ---
 
-## Como executar
+## How to run
 
 ```bash
 uv run python -m connectlang_rpa.main
@@ -166,7 +166,7 @@ uv run connectlang-rpa
 
 ---
 
-## Como fazer login manual
+## Manual login
 
 The bot does not automate login. Authentication is done once, manually:
 
@@ -180,7 +180,7 @@ The bot does not automate login. Authentication is done once, manually:
 
 ---
 
-## Como adicionar palavras
+## How to add words
 
 The word list is a JSON file (`words.json` by default, path set by `WORDS_FILE` in `.env`).
 
@@ -207,7 +207,7 @@ Example (`data/words.example.json`):
 
 ---
 
-## Logs e screenshots
+## Logs and screenshots
 
 **Structured logs:**
 
@@ -224,7 +224,7 @@ Both `logs/*.jsonl` and `screenshots/*.png` are gitignored. Only `.gitkeep` file
 
 ---
 
-## Segurança
+## Security
 
 - **No credentials in source code.** All configuration is loaded from environment variables via `.env`.
 - **`.env` is never versioned.** The repository only contains `.env.example` with placeholder values.
@@ -236,7 +236,7 @@ Both `logs/*.jsonl` and `screenshots/*.png` are gitignored. Only `.gitkeep` file
 
 ---
 
-## Limitações
+## Limitations
 
 - **UI dependency.** The bot relies on the ConnectLang page structure. If button labels or page flow change, locators may need to be updated.
 - **No duplicate detection.** The bot does not check whether a word already exists before adding it. Re-running the same list may create duplicates.
@@ -247,7 +247,7 @@ Both `logs/*.jsonl` and `screenshots/*.png` are gitignored. Only `.gitkeep` file
 
 ---
 
-## Próximos passos
+## Next steps
 
 Planned improvements, not yet implemented:
 
