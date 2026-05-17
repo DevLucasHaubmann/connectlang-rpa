@@ -2,13 +2,15 @@
 
 ## Overview
 
-ConnectLang RPA Bot is a single-workflow automation bot built in layers. Each layer has one
-responsibility: configuration, browser lifecycle, business flow, page locators, reusable
-browser actions, utilities, and data models. Layers communicate downward; none of them reach
-back up.
+ConnectLang RPA Bot is built in two independent layers:
 
-This is a focused MVP, not a generic RPA framework. It automates one flow on one platform
-and is intentionally scoped to that.
+1. **Core RPA** — the automation engine that drives Playwright and manages the vocabulary workflow.
+2. **Desktop app** — a CustomTkinter graphical interface that runs the core engine as a subprocess.
+
+The two layers share no runtime coupling. The desktop app does not import Playwright or any core
+service. It launches `uv run connectlang-rpa` as a subprocess and communicates with it through
+stdout (parsed as JSONL). This boundary keeps the automation logic isolated, testable without a
+GUI, and runnable from the terminal without the desktop dependency.
 
 ---
 
@@ -20,11 +22,13 @@ and is intentionally scoped to that.
 - Centralize locators so a UI change requires editing one file.
 - Record every outcome in a structured, machine-readable log.
 - Avoid automating login, captcha, or any authentication bypass.
-- Keep tests on pure logic — no browser required to run the test suite.
+- Keep tests on pure logic — no browser or GUI required to run the test suite.
 
 ---
 
-## High-level flow
+## Core RPA layer
+
+### High-level flow
 
 ```
 main() → configure_logging()
@@ -41,9 +45,7 @@ main() → configure_logging()
 Word loading and session validation happen before the batch loop. A configuration error or
 expired session exits immediately with a clear message rather than failing mid-run.
 
----
-
-## Layer responsibilities
+### Layer responsibilities
 
 | Module | Responsibility |
 |---|---|
@@ -61,9 +63,7 @@ expired session exits immediately with a clear message rather than failing mid-r
 | `models/word_entry.py` | `WordEntry` dataclass. Pure data — no methods, no browser references. |
 | `exceptions.py` | Domain exceptions: `SessionExpiredError` and any other errors that carry RPA-specific meaning. |
 
----
-
-## Service Layer
+### Service layer
 
 `VocabularyService` owns the vocabulary workflow. Each public method corresponds to one
 observable step: navigate, open form, fill entry, select languages, trigger AI fill, wait
@@ -79,6 +79,77 @@ logic is applied once at the action boundary, not scattered across flow code.
 `VocabularyLocators` sits between the service and the DOM. The service asks for a locator
 by name (e.g., `self._locators.new_word_button`); the locator file decides the selector
 strategy. The service never contains a raw selector string.
+
+---
+
+## Desktop layer
+
+### Structure
+
+The desktop app follows a **Hub and Spoke** pattern:
+
+- **Hub** — `MainWindow`. Owns the application state machine and wires all services and widgets.
+- **Spokes** — `ProcessRunner`, `LogStreamer`, `ExecutionSummary`, `DesktopWordService`, `WordInputPanel`. Each has one responsibility and communicates back to the hub through callbacks.
+
+```
+MainWindow (hub)
+├── WordInputPanel        ← word list editor widget
+├── ProcessRunner         ← subprocess lifecycle
+├── LogStreamer           ← stdout parser and dispatcher
+└── ExecutionSummary      ← run metrics aggregator
+```
+
+`DesktopWordService` is a module (not a class) used by `WordInputPanel` to read and write `data/words.json`.
+
+### Component responsibilities
+
+**`ProcessRunner`**
+
+Launches `uv run connectlang-rpa` as a child process in a background daemon thread. Streams
+stdout line by line and dispatches each line to an `on_output` callback. Notifies the caller
+when the process starts, finishes (with exit code), or fails to start. All callbacks are
+invoked from the worker thread; callers must marshal to the UI thread (via `widget.after(0, ...)`).
+
+**`LogStreamer`**
+
+Receives raw stdout lines from `ProcessRunner`. Attempts to parse each line as JSON (JSONL
+format emitted by `structlog`). Falls back to plain-text parsing if the line is not valid JSON.
+Dispatches:
+
+- A formatted human-readable string to `on_line` (displayed in the log panel).
+- The current word name to `on_word_update` (displayed in the execution status label).
+- Progress counts to `on_progress` (drives the progress bar).
+- The full `ParsedLogLine` to `on_event` (consumed by `ExecutionSummary`).
+
+**`ExecutionSummary`**
+
+Accumulates `total`, `successes`, and `failures` by observing structured log events as they
+arrive. When the process exits, `finalize(exit_code)` is called. `to_display_lines()` returns
+the lines to render in the summary panel. The summary is hidden until `finalize()` is called.
+
+**`DesktopWordService`**
+
+Pure functions (no class) for managing `data/words.json`:
+
+- `parse_lines(raw_text)` — normalises textarea input into a deduplicated list of non-empty strings.
+- `build_payload(words)` — converts strings to `{"text": w, "entry_type": "word"}` dicts.
+- `save_words(words, path)` — serialises to JSON and writes the file. Raises `EmptyWordListError` if the list is empty.
+- `load_words(path)` — reads the file and returns the word strings. Returns an empty list if the file is missing or malformed.
+
+All entries are saved with `entry_type: "word"`. Sentence entries require direct JSON editing.
+
+### Why the desktop app does not call Playwright directly
+
+The desktop UI runs in the main thread (Tkinter's event loop). Playwright's synchronous API
+blocks the calling thread. Running a Playwright session on the UI thread would freeze the
+interface for the entire duration of the automation.
+
+The subprocess approach avoids this entirely:
+
+- The core RPA engine runs in its own process with its own event loop.
+- The UI thread stays free to render log lines, update the progress bar, and respond to user input.
+- The automation code does not need to know it is being driven by a GUI.
+- The terminal mode continues to work independently.
 
 ---
 
@@ -114,11 +185,6 @@ Locators follow this priority order:
 Prohibited: absolute XPath, layout utility classes (`.mt-4`, `.flex`), index-based selectors
 without a stable anchor.
 
-Semantic locators are more resilient to DOM refactors that do not change visible text or
-ARIA roles. They are still fragile to copy changes (e.g., a button renamed from
-"Neues Wort" to "Neuen Eintrag erstellen") or structural rewrites. See
-[Technical limitations](#technical-limitations).
-
 ---
 
 ## Persistent session strategy
@@ -137,17 +203,27 @@ starts, not mid-run.
 
 **Session expiry.** If the saved session has expired, ConnectLang redirects to a login URL.
 `ensure_session_active()` detects this redirect and raises `SessionExpiredError`, which
-causes `main.py` to exit with a clear message before the batch loop begins. The user logs
-in manually and runs again.
+causes `main.py` to exit with a clear message before the batch loop begins.
 
 `browser-profile/` is gitignored. It contains live session cookies and must never be
 committed.
 
 ---
 
-## Error handling strategy
+## Local data files
 
-Errors are categorized by scope and handled at the appropriate level:
+| File | Versioned | Purpose |
+|---|---|---|
+| `data/words.example.json` | Yes | Template showing the expected format. Safe to commit. |
+| `data/words.json` | No | Local working file. Written by the user or by the desktop editor. Gitignored. |
+| `browser-profile/` | No | Persistent Chromium session data (cookies, storage). Gitignored. |
+| `logs/*.jsonl` | No | Structured log files, one per run. Gitignored. |
+| `screenshots/*.png` | No | Failure screenshots. Gitignored. |
+| `.env` | No | Local environment configuration. Gitignored. |
+
+---
+
+## Error handling strategy
 
 | Error type | Where raised | How handled |
 |---|---|---|
@@ -157,6 +233,7 @@ Errors are categorized by scope and handled at the appropriate level:
 | Transient browser error | `browser_actions.py` → `BrowserActionError` | Retried up to 3 times with exponential backoff by `transient_retry`. |
 | Per-word failure (after retries exhausted) | `_process_word()` in `main.py` | Logged, screenshot captured, result marked as failure. Loop continues to the next entry. |
 | Screenshot failure | `utils/screenshots.py` | Caught internally; never re-raised. The original error remains the reported cause. |
+| Desktop: subprocess fails to start | `ProcessRunner._run()` | `on_error` callback invoked; UI transitions to ERROR state. |
 
 **Submit is not retried blindly.** `submit_word()` does not carry `@transient_retry`. A
 failed submit is ambiguous: the entry may have been saved before the success message
@@ -180,19 +257,12 @@ Key events logged:
 - `execution_finished` — totals, elapsed time.
 
 Each run writes to a dedicated `.jsonl` file under `logs/` with a UTC timestamp in the
-filename (e.g., `logs/run_2026-05-17_14-30-00.jsonl`). If a file with the same timestamp
-already exists (two runs in the same second), a numeric suffix is appended. The file is
-opened with mode `"x"` (exclusive create) to prevent overwriting.
+filename. If a file with the same timestamp already exists, a numeric suffix is appended.
+The file is opened with mode `"x"` (exclusive create) to prevent overwriting.
 
-The terminal also receives the same JSON stream, plus a human-readable summary table at
-the end of the run.
-
-Failure screenshots are saved under `screenshots/` with the format
-`error_YYYY-MM-DD_HH-MM-SS_<sanitized-word>.png`.
-
-Neither logs nor screenshots are committed. Both directories contain only a `.gitkeep`
-file. Logs and screenshots may capture visible page content (text, form state) and should
-be treated as sensitive local artifacts.
+The terminal receives the same JSON stream, plus a human-readable summary table at the
+end of the run. The desktop app parses each JSONL line via `LogStreamer` and displays a
+formatted version in the LOGS panel.
 
 Credentials, cookies, and session tokens are never logged.
 
@@ -205,17 +275,19 @@ Tests cover pure logic only:
 - `models/word_entry.py` — field validation and defaults.
 - `config/settings.py` — valid settings, missing required fields.
 - `services/word_loader.py` — valid file, empty file, malformed entries, encoding edge cases.
+- `desktop/services/desktop_word_service.py` — `parse_lines`, `build_payload`, `save_words`, `load_words`.
+- `desktop/services/log_streamer.py` — JSON parsing, plain-text fallback, event dispatch.
+- `desktop/services/execution_summary.py` — event accumulation, finalize, display lines.
 - `utils/` — helpers where logic is non-trivial.
 
-No test opens a real browser. Playwright interactions are validated manually against a live
-session (see `tests/manual/` for documented procedures).
+No test opens a real browser or a real window. Playwright interactions are validated manually
+against a live session (see `tests/manual/` for documented procedures).
 
 The test suite is gated by:
 
-```
+```bash
 uv run ruff check .
-uv run ruff format --check .
-uv run mypy src/
+uv run mypy src
 uv run pytest
 ```
 
@@ -225,23 +297,22 @@ mypy runs in strict mode. All public signatures are fully annotated.
 
 ## Technical limitations
 
-These are known, accepted limitations of the current MVP:
-
-- **UI dependency.** The bot drives a real browser. It has no access to a ConnectLang API.
-  Any change to button labels, form structure, language option values, or page flow may
-  break locators or service logic.
-- **Locator fragility.** Even semantic locators depend on visible text and ARIA roles. A
-  copy change (e.g., "Neues Wort" → "Neuen Eintrag erstellen") silently breaks the selector.
+- **UI dependency.** The bot drives a real browser. Any change to button labels, form structure,
+  language option values, or page flow may break locators or service logic.
+- **Locator fragility.** Even semantic locators depend on visible text and ARIA roles. A copy
+  change silently breaks the selector.
 - **No duplicate detection.** The bot does not check whether a word already exists before
-  submitting. Re-running the same list may create duplicate entries.
+  submitting.
 - **No checkpoint or resume.** If the run is interrupted, there is no mechanism to skip
   already-processed entries on re-run.
 - **No dry-run mode.** There is no way to simulate the flow without writing to ConnectLang.
-- **No full CLI.** All configuration is via `.env`. The bot does not accept command-line
-  flags (`--words-file`, `--headless`, `--dry-run`).
+- **No CLI flags.** All configuration is via `.env`.
+- **Desktop hardcodes `entry_type: "word"`.** Sentence entries require manual JSON editing.
+- **Desktop requires `uv` in PATH.** The subprocess command is `uv run connectlang-rpa`.
+  If `uv` is not accessible, the run fails immediately with an OS-level error.
 - **No parallelism.** The batch loop is sequential. One word at a time, one browser context.
 - **Manual login dependency.** If the session expires, a human must log in again before the
-  next run. There is no recovery path that does not require manual intervention.
+  next run.
 
 ---
 
@@ -254,7 +325,6 @@ Not yet implemented. Listed for orientation only:
 - **Dry-run mode** — execute all steps up to submit, then abort without saving.
 - **CLI with Typer** — expose `--words-file`, `--headless`, `--dry-run`, and other flags.
 - **GitHub Actions** — CI pipeline for linting, type checking, and unit tests on every push.
-- **MutationObserver / dynamic wait** — DOM-observer approach for the AI fill step if static
-  waits prove unreliable in practice.
-- **Page Object Model** — if the project expands to multiple distinct pages or flows, POM
-  may be worth introducing to consolidate per-page locators and actions.
+- **Sentence support in desktop editor** — allow per-word `entry_type` selection in the UI.
+- **Page Object Model** — if the project expands to multiple distinct pages, POM may be worth
+  introducing to consolidate per-page locators and actions.

@@ -86,6 +86,9 @@ Open `.env` and review the values. The defaults work for most setups.
 
 ## 5. Prepare the word list
 
+`data/words.json` is the local working file. It is **not versioned**. `data/words.example.json`
+is the versioned template.
+
 **Bash / macOS / Linux:**
 
 ```bash
@@ -112,7 +115,9 @@ Edit `data/words.json` with the entries you want to add:
 - `entry_type` — `"word"` or `"sentence"`. Optional; defaults to `"word"` if omitted.
 
 If the file is missing, empty, or contains invalid JSON, the bot exits with an error before
-opening the browser. No browser action is taken on an invalid word list.
+opening the browser.
+
+Alternatively, use the desktop app to manage the word list (see [Section 8](#8-edit-words-in-the-desktop-app)).
 
 ---
 
@@ -137,33 +142,56 @@ message asking you to log in again.
 
 ## 7. Run the automation
 
-```bash
-uv run python -m connectlang_rpa.main
-```
-
-Alternatively, use the installed script entry point (available after `uv sync`):
+### Option A — Terminal
 
 ```bash
 uv run connectlang-rpa
 ```
 
-Both commands are equivalent. The bot does not support command-line flags; all configuration
-is via `.env`.
+The bot loads the word list, opens the browser, processes each entry, and prints a summary.
+Structured logs stream to the terminal in real time.
 
-The bot will:
+### Option B — Desktop app
 
-1. Load and validate the word list.
-2. Open the browser with the persistent profile.
-3. Verify the session is active.
-4. Process each entry: open form, fill text, select languages, trigger AI fill, save.
-5. Log the outcome for each entry.
-6. Print an execution summary and exit.
+```bash
+uv run connectlang-desktop
+```
+
+Opens a graphical window with three panels:
+
+| Panel | Purpose |
+|---|---|
+| Word list editor (left) | Add/remove words; click **Salvar lista** to persist to `data/words.json`. |
+| Execution panel (right) | Shows progress bar, current word, and execution status. |
+| Log panel (bottom) | Displays parsed log lines in real time as the bot runs. |
+
+Click **Iniciar robô** to start the run. The button is disabled until the word list has
+at least one entry. The word list editor is locked while a run is in progress.
+
+After the run completes, an execution summary panel appears showing total entries, successes,
+failures, and exit code.
+
+> The desktop app requires `uv` to be accessible in the PATH of the shell that launches it.
 
 ---
 
-## 8. Read the execution summary
+## 8. Edit words in the desktop app
 
-At the end of each run, the bot prints a summary to the terminal:
+The word editor accepts one word or phrase per line. Blank lines and duplicates are ignored.
+
+1. Type or paste words in the text area (one per line).
+2. Click **Salvar lista**.
+3. The app writes `data/words.json` and enables the **Iniciar robô** button.
+
+Note: the desktop editor always saves entries with `entry_type: "word"`. To add sentence
+entries (`entry_type: "sentence"`), edit `data/words.json` directly in a text editor.
+
+---
+
+## 9. Read the execution summary
+
+At the end of each run, the bot prints a summary to the terminal (and displays it in the
+desktop app's execution panel):
 
 | Field | Description |
 |---|---|
@@ -178,7 +206,7 @@ screenshots (if captured).
 
 ---
 
-## 9. Check logs and screenshots
+## 10. Check logs and screenshots
 
 **Logs:**
 
@@ -194,8 +222,8 @@ If two runs start within the same second, a numeric suffix is appended:
 logs/run_2026-05-17_14-30-00_1.jsonl
 ```
 
-Each line in the file is a JSON object representing one event (word started, word saved,
-word failed, session check, etc.).
+Each line is a JSON object representing one event (word started, word saved, word failed,
+session check, etc.).
 
 **Screenshots:**
 
@@ -206,44 +234,44 @@ screenshots/error_2026-05-17_14-30-00_der_Termin.png
 ```
 
 Both `logs/*.jsonl` and `screenshots/*.png` are gitignored. Only `.gitkeep` files are
-tracked to preserve the directories in the repository.
+tracked to preserve the directories.
 
-> Logs and screenshots may capture visible page content (text, form state). Treat them
-> as sensitive local artifacts. Do not share or commit them.
+> Logs and screenshots may capture visible page content. Treat them as sensitive local
+> artifacts. Do not share or commit them.
 
 ---
 
-## 10. Common errors
+## 11. Common errors
 
 | Error | Probable cause | Resolution |
 |---|---|---|
-| `SessionExpiredError` / vocabulary page unavailable | Session cookie expired; ConnectLang redirected to login. | Log in manually (see [Section 6](#6-first-run-and-manual-login)) and run again. |
-| Browser profile locked | Another Chromium process is using `browser-profile/`. | Close any open browser windows that use the same profile, then retry. |
-| `words.json` not found | `WORDS_FILE` points to a path that does not exist. | Check the `WORDS_FILE` value in `.env` and confirm the file is present. |
-| Invalid JSON in word list | Malformed JSON in `data/words.json`. | Validate the file with a JSON linter. Correct the syntax and retry. |
-| Invalid `entry_type` value | A word entry has an `entry_type` other than `"word"` or `"sentence"`. | Fix the value in `data/words.json`. The allowed values are `"word"` and `"sentence"`. |
-| AI fill timeout | The AI auto-fill step did not complete within `DEFAULT_TIMEOUT_MS`. | Increase `DEFAULT_TIMEOUT_MS` in `.env`, or retry the failed words manually. |
+| `SessionExpiredError` / vocabulary page unavailable | Session cookie expired. | Log in manually (see [Section 6](#6-first-run-and-manual-login)) and run again. |
+| Browser profile locked | Another Chromium process is using `browser-profile/`. | Close any open browser windows using the same profile, then retry. |
+| `words.json` not found | `WORDS_FILE` points to a path that does not exist. | Check `WORDS_FILE` in `.env` and confirm the file is present. |
+| Invalid JSON in word list | Malformed JSON in `data/words.json`. | Validate with a JSON linter; correct and retry. |
+| Invalid `entry_type` value | A word entry has a value other than `"word"` or `"sentence"`. | Fix the value in `data/words.json`. |
+| AI fill timeout | The AI auto-fill step did not complete within `DEFAULT_TIMEOUT_MS`. | Increase `DEFAULT_TIMEOUT_MS` in `.env`, or retry the failed words. |
 | Button / locator not found | ConnectLang changed a button label or page structure. | Check `locators/vocabulary_locators.py` and update the affected selector. |
-| Possible duplicate word | The same word was already present and the bot submitted it again. | The bot does not detect duplicates. Review the ConnectLang vocabulary list and remove duplicates manually. |
+| Possible duplicate word | The same word was already present and the bot submitted it again. | The bot does not detect duplicates. Review ConnectLang and remove duplicates manually. |
+| Desktop: bot does not start | `uv` is not in PATH. | Ensure `uv` is installed and accessible from the shell that opens the desktop app. |
 
 ---
 
-## 11. Quality commands
+## 12. Quality commands
 
 Run these before committing any change:
 
 ```bash
 uv run ruff check .
-uv run ruff format --check .
-uv run mypy src/
+uv run mypy src
 uv run pytest
 ```
 
-All four must pass with no errors.
+All three must pass with no errors.
 
 ---
 
-## 12. Safety checklist before committing
+## 13. Safety checklist before committing
 
 ```bash
 git status
@@ -253,8 +281,8 @@ Verify that none of the following appear as staged or untracked files:
 
 - `.env` — contains local secrets.
 - `browser-profile/` — contains live session cookies.
+- `data/words.json` — local working file; not for version control.
 - `logs/*.jsonl` — may contain screen content.
 - `screenshots/*.png` — may contain screen content.
 
-If any of these appear, add them to `.gitignore` or remove them from the staging area
-before committing.
+If any of these appear, remove them from the staging area before committing.
