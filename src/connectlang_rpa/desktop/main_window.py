@@ -7,6 +7,7 @@ from pathlib import Path
 import customtkinter as ctk
 
 from connectlang_rpa.desktop import theme
+from connectlang_rpa.desktop.services.execution_summary import ExecutionSummary
 from connectlang_rpa.desktop.services.log_streamer import LogStreamer
 from connectlang_rpa.desktop.services.process_runner import ProcessRunner
 from connectlang_rpa.desktop.widgets.word_input_panel import WordInputPanel
@@ -45,10 +46,12 @@ class MainWindow(ctk.CTk):  # type: ignore[misc]  # CTk has no type stubs
         super().__init__()
         self._state = AppState.IDLE
         self._runner: ProcessRunner | None = None
+        self._summary = ExecutionSummary()
         self._streamer = LogStreamer(
             on_line=lambda line: self.after(0, self.append_log, line),
             on_word_update=lambda word: self.after(0, self._handle_word_update, word),
             on_progress=lambda c, t: self.after(0, self.set_progress, c, t),
+            on_event=lambda parsed: self.after(0, self._summary.handle_event, parsed),
         )
         self._configure_window()
         self._build_layout()
@@ -210,6 +213,21 @@ class MainWindow(ctk.CTk):  # type: ignore[misc]  # CTk has no type stubs
         )
         self._exec_status_label.grid(row=2, column=0, pady=theme.PAD_LG)
 
+        self._summary_box = ctk.CTkTextbox(
+            center,
+            font=theme.FONT_MONO,
+            fg_color=theme.LOG_BG,
+            text_color=theme.TEXT_MONO,
+            border_color=theme.LOG_BORDER,
+            border_width=theme.BORDER_WIDTH,
+            corner_radius=theme.CORNER_RADIUS,
+            state="disabled",
+            wrap="none",
+            height=120,
+        )
+        self._summary_box.grid(row=3, column=0, sticky="ew", pady=(0, theme.PAD_SM))
+        self._summary_box.grid_remove()
+
         self._btn_run = ctk.CTkButton(
             frame,
             text="Iniciar robô",
@@ -286,6 +304,8 @@ class MainWindow(ctk.CTk):  # type: ignore[misc]  # CTk has no type stubs
 
     def _on_run_clicked(self) -> None:
         self._streamer.reset()
+        self._summary.reset()
+        self._hide_summary()
         self._runner = ProcessRunner(
             command=_BOT_COMMAND,
             cwd=_PROJECT_ROOT,
@@ -313,6 +333,7 @@ class MainWindow(ctk.CTk):  # type: ignore[misc]  # CTk has no type stubs
         )
 
     def _handle_finished(self, returncode: int) -> None:
+        self._summary.finalize(returncode)
         if returncode == 0:
             self.set_state(AppState.SUCCESS)
             self._exec_status_label.configure(
@@ -325,15 +346,18 @@ class MainWindow(ctk.CTk):  # type: ignore[misc]  # CTk has no type stubs
                 text=f"Erro (código {returncode})", text_color=theme.COLOR_ERROR,
             )
             self.append_log(f"✘ Execução finalizada com erro (código {returncode}).")
+        self._show_summary()
         self._word_panel.set_locked(False)
         self._btn_run.configure(state="normal")
 
     def _handle_error(self, exc: Exception) -> None:
+        self._summary.finalize(1)
         self.set_state(AppState.ERROR)
         self._exec_status_label.configure(
             text="Erro ao iniciar processo", text_color=theme.COLOR_ERROR,
         )
         self.append_log(f"✘ Falha ao iniciar robô: {exc}")
+        self._show_summary()
         self._word_panel.set_locked(False)
         self._btn_run.configure(state="normal")
 
@@ -365,6 +389,17 @@ class MainWindow(ctk.CTk):  # type: ignore[misc]  # CTk has no type stubs
         self._log_box.configure(state="normal")
         self._log_box.delete("1.0", "end")
         self._log_box.configure(state="disabled")
+
+    def _show_summary(self) -> None:
+        lines = self._summary.to_display_lines()
+        self._summary_box.configure(state="normal")
+        self._summary_box.delete("1.0", "end")
+        self._summary_box.insert("end", "\n".join(lines))
+        self._summary_box.configure(state="disabled")
+        self._summary_box.grid()
+
+    def _hide_summary(self) -> None:
+        self._summary_box.grid_remove()
 
     def set_progress(self, current: int, total: int) -> None:
         fraction = current / total if total > 0 else 0.0

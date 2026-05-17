@@ -112,10 +112,12 @@ class LogStreamer:
         on_line: Callable[[str], None],
         on_word_update: Callable[[str], None] | None = None,
         on_progress: Callable[[int, int], None] | None = None,
+        on_event: Callable[[ParsedLogLine], None] | None = None,
     ) -> None:
         self._on_line = on_line
         self._on_word_update = on_word_update
         self._on_progress = on_progress
+        self._on_event = on_event
         self._state = _RunState()
 
     def reset(self) -> None:
@@ -155,3 +157,6 @@ class LogStreamer:
             self._state.processed += 1
             if self._on_progress and self._state.total > 0:
                 self._on_progress(self._state.processed, self._state.total)
+
+        if self._on_event:
+            self._on_event(parsed)
