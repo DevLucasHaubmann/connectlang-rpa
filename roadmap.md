@@ -16,3 +16,5 @@
 | 1.1 | Criar sistema de settings tipado (pydantic-settings) | ✅ Concluída |
 | 1.2 | Criar modelo de palavra (WordEntry) | ✅ Concluída |
 | 1.3 | Criar carregador de palavras | ✅ Concluída |
+| 2.1 | Criar BrowserManager com sessão persistente | ✅ Concluída |
+| 2.2 | Criar pre-flight check do perfil persistente | ✅ Concluída |
