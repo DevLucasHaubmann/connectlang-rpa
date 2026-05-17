@@ -1,4 +1,4 @@
-# Hook: track-activity
+﻿# Hook: track-activity
 # Recebe evento via STDIN (JSON) e registra atividade relevante no Obsidian.
 # Caminhos sensíveis são ignorados. Falhas não críticas resultam em exit 0.
 

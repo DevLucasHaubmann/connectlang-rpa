@@ -1,4 +1,4 @@
-# Hook: session-end
+﻿# Hook: session-end
 # Executado ao encerrar a sessão do Claude Code.
 # Registra fim da sessão na nota ativa e exibe lembrete de pendências.
 

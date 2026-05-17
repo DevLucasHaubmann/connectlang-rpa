@@ -1,4 +1,4 @@
-# Hook: session-start
+﻿# Hook: session-start
 # Executado no início de cada sessão do Claude Code.
 # Registra início de sessão e garante estrutura base no Obsidian.
 
@@ -17,7 +17,14 @@ if (-not (Test-Path $vaultPath)) {
 $projectNote  = if ($env:OBSIDIAN_PROJECT_NOTE)  { $env:OBSIDIAN_PROJECT_NOTE }  else { "RPA ConnectLang/00 - Roadmap.md" }
 $sessionsDir  = if ($env:OBSIDIAN_SESSIONS_DIR)  { $env:OBSIDIAN_SESSIONS_DIR }  else { "RPA ConnectLang/01 - Sessões" }
 
-$rpaRoot      = Join-Path $vaultPath "RPA ConnectLang"
+# Deriva a raiz do projeto a partir do pai de OBSIDIAN_PROJECT_NOTE
+$projectNoteParent = Split-Path $projectNote -Parent
+$rpaRoot = if ($projectNoteParent) {
+    Join-Path $vaultPath $projectNoteParent
+} else {
+    $vaultPath
+}
+
 $sessionsDirFull = Join-Path $vaultPath $sessionsDir
 $projectNoteFull = Join-Path $vaultPath $projectNote
 
