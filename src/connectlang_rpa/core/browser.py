@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING
 
 from playwright.sync_api import BrowserContext, Page, Playwright, sync_playwright
 
+from connectlang_rpa.core.profile import ensure_browser_profile_ready
+
 if TYPE_CHECKING:
     from connectlang_rpa.config.settings import Settings
 
@@ -29,6 +31,7 @@ class BrowserManager:
         return self._context
 
     def start(self) -> BrowserManager:
+        ensure_browser_profile_ready(self._settings.browser_profile_dir)
         self._playwright = sync_playwright().start()
         try:
             self._context = self._playwright.chromium.launch_persistent_context(
