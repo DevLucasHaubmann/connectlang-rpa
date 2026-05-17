@@ -55,6 +55,7 @@ class MainWindow(ctk.CTk):  # type: ignore[misc]  # CTk has no type stubs
         )
         self._configure_window()
         self._build_layout()
+        self._sync_initial_word_list()
         self._apply_state(self._state)
 
     # ------------------------------------------------------------------
@@ -291,6 +292,9 @@ class MainWindow(ctk.CTk):  # type: ignore[misc]  # CTk has no type stubs
     # ------------------------------------------------------------------
     # Word list callbacks
     # ------------------------------------------------------------------
+
+    def _sync_initial_word_list(self) -> None:
+        self._on_word_list_saved(self._word_panel.current_words)
 
     def _on_word_list_saved(self, words: list[str]) -> None:
         if self._state == AppState.RUNNING:

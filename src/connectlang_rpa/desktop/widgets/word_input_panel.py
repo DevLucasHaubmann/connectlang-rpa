@@ -188,6 +188,10 @@ class WordInputPanel(ctk.CTkFrame):  # type: ignore[misc]
         else:
             self._btn_clear.configure(state="disabled")
 
+    @property
+    def current_words(self) -> list[str]:
+        return svc.parse_lines(self._textbox.get("1.0", "end"))
+
     def _load_existing(self) -> None:
         words = svc.load_words(self._words_path)
         if not words:
@@ -196,4 +200,3 @@ class WordInputPanel(ctk.CTkFrame):  # type: ignore[misc]
         self._btn_clear.configure(state="normal")
         msg = f"{len(words)} palavra(s) carregada(s) do arquivo."
         self._show_feedback(msg, theme.TEXT_SECONDARY)
-        self._on_list_saved(words)
