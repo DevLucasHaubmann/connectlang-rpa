@@ -248,35 +248,54 @@ def test_safe_select_preserves_cause() -> None:
 # --- safe_select_combobox ---
 
 
-def test_safe_select_combobox_uses_select_option_when_available() -> None:
+def test_safe_select_combobox_uses_select_option_label_when_available() -> None:
     locator = _make_locator()
     safe_select_combobox(locator, "Deutsch", "source language select")
-    locator.select_option.assert_called_once_with("Deutsch", timeout=10_000)
+    locator.select_option.assert_called_once_with(label="Deutsch", timeout=10_000)
 
 
 def test_safe_select_combobox_uses_custom_timeout() -> None:
     locator = _make_locator()
     safe_select_combobox(locator, "English", "translation language select", timeout_ms=5_000)
-    locator.select_option.assert_called_once_with("English", timeout=5_000)
+    locator.select_option.assert_called_once_with(label="English", timeout=5_000)
+
+
+def test_safe_select_combobox_does_not_search_page_globally_when_select_option_succeeds() -> None:
+    """Same option in multiple dropdowns: must not trigger a global page search."""
+    locator = _make_locator()
+    safe_select_combobox(locator, "Deutsch", "source language select")
+    locator.page.get_by_role.assert_not_called()
+    locator.get_by_role.assert_not_called()
 
 
 def test_safe_select_combobox_falls_back_to_click_when_select_option_fails() -> None:
     locator = _make_locator()
     option_locator = MagicMock()
     locator.select_option.side_effect = PlaywrightError("not a native select")
-    locator.page.get_by_role.return_value = option_locator
+    locator.get_by_role.return_value = option_locator
 
     safe_select_combobox(locator, "Deutsch", "source language select")
 
     locator.click.assert_called_once()
-    locator.page.get_by_role.assert_called_once_with("option", name="Deutsch")
+    locator.get_by_role.assert_called_once_with("option", name="Deutsch")
     option_locator.click.assert_called_once()
+
+
+def test_safe_select_combobox_fallback_does_not_use_page_get_by_role() -> None:
+    """Fallback for custom widgets must scope the option search within the locator, not the page."""
+    locator = _make_locator()
+    locator.select_option.side_effect = PlaywrightError("not a native select")
+    locator.get_by_role.return_value = MagicMock()
+
+    safe_select_combobox(locator, "Deutsch", "source language select")
+
+    locator.page.get_by_role.assert_not_called()
 
 
 def test_safe_select_combobox_raises_with_value_in_message_on_fallback_failure() -> None:
     locator = _make_locator()
     locator.select_option.side_effect = PlaywrightError("not a native select")
-    locator.page.get_by_role.return_value.click.side_effect = PlaywrightError("option not found")
+    locator.get_by_role.return_value.click.side_effect = PlaywrightError("option not found")
 
     with pytest.raises(BrowserActionError, match="Deutsch"):
         safe_select_combobox(locator, "Deutsch", "source language select")
@@ -285,17 +304,18 @@ def test_safe_select_combobox_raises_with_value_in_message_on_fallback_failure()
 def test_safe_select_combobox_raises_with_context_in_message_on_fallback_failure() -> None:
     locator = _make_locator()
     locator.select_option.side_effect = PlaywrightError("not a native select")
-    locator.page.get_by_role.return_value.click.side_effect = PlaywrightError("option not found")
+    locator.get_by_role.return_value.click.side_effect = PlaywrightError("option not found")
 
     with pytest.raises(BrowserActionError, match="source language select"):
         safe_select_combobox(locator, "Deutsch", "source language select")
 
 
-def test_safe_select_combobox_preserves_cause_on_fallback_failure() -> None:
+def test_safe_select_combobox_preserves_select_option_cause_on_fallback_failure() -> None:
+    """When both select_option and fallback fail, the original select_option error is the cause."""
     locator = _make_locator()
-    original = PlaywrightError("option not found")
-    locator.select_option.side_effect = PlaywrightError("not a native select")
-    locator.page.get_by_role.return_value.click.side_effect = original
+    original = PlaywrightError("not a native select")
+    locator.select_option.side_effect = original
+    locator.get_by_role.return_value.click.side_effect = PlaywrightError("option not found")
 
     with pytest.raises(BrowserActionError) as exc_info:
         safe_select_combobox(locator, "Deutsch", "source language select")
