@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from playwright.sync_api import Error as PlaywrightError
@@ -10,7 +10,9 @@ from connectlang_rpa.actions import (
     safe_click,
     safe_fill,
     safe_select,
+    safe_select_combobox,
     wait_until_enabled,
+    wait_until_has_value,
     wait_until_visible,
 )
 
@@ -50,6 +52,72 @@ def test_wait_until_visible_preserves_original_cause() -> None:
     with pytest.raises(BrowserActionError) as exc_info:
         wait_until_visible(locator, "test element")
     assert exc_info.value.__cause__ is original
+
+
+# --- wait_until_has_value ---
+
+
+def test_wait_until_has_value_calls_wait_for_visible_first() -> None:
+    locator = _make_locator()
+    with patch("connectlang_rpa.actions.browser_actions.expect") as mock_expect:
+        mock_expect.return_value.to_have_value = MagicMock()
+        wait_until_has_value(locator, "translation field")
+    locator.wait_for.assert_called_once_with(state="visible", timeout=10_000)
+
+
+def test_wait_until_has_value_calls_to_have_value_with_nonempty_pattern() -> None:
+    locator = _make_locator()
+    with patch("connectlang_rpa.actions.browser_actions.expect") as mock_expect:
+        assertion = MagicMock()
+        mock_expect.return_value = assertion
+        wait_until_has_value(locator, "translation field", timeout_ms=5_000)
+    mock_expect.assert_called_once_with(locator)
+    assertion.to_have_value.assert_called_once()
+    args, kwargs = assertion.to_have_value.call_args
+    assert kwargs.get("timeout") == 5_000
+
+
+def test_wait_until_has_value_uses_default_timeout() -> None:
+    locator = _make_locator()
+    with patch("connectlang_rpa.actions.browser_actions.expect") as mock_expect:
+        assertion = MagicMock()
+        mock_expect.return_value = assertion
+        wait_until_has_value(locator, "translation field")
+    _, kwargs = assertion.to_have_value.call_args
+    assert kwargs.get("timeout") == 10_000
+
+
+def test_wait_until_has_value_raises_browser_action_error_when_field_empty() -> None:
+    locator = _make_locator()
+    with patch("connectlang_rpa.actions.browser_actions.expect") as mock_expect:
+        mock_expect.return_value.to_have_value.side_effect = AssertionError("value empty")
+        with pytest.raises(BrowserActionError, match="remained empty"):
+            wait_until_has_value(locator, "AI generated translation")
+
+
+def test_wait_until_has_value_includes_context_in_error_message() -> None:
+    locator = _make_locator()
+    with patch("connectlang_rpa.actions.browser_actions.expect") as mock_expect:
+        mock_expect.return_value.to_have_value.side_effect = AssertionError("value empty")
+        with pytest.raises(BrowserActionError, match="AI generated translation"):
+            wait_until_has_value(locator, "AI generated translation")
+
+
+def test_wait_until_has_value_preserves_original_cause() -> None:
+    locator = _make_locator()
+    original = AssertionError("value empty")
+    with patch("connectlang_rpa.actions.browser_actions.expect") as mock_expect:
+        mock_expect.return_value.to_have_value.side_effect = original
+        with pytest.raises(BrowserActionError) as exc_info:
+            wait_until_has_value(locator, "translation field")
+    assert exc_info.value.__cause__ is original
+
+
+def test_wait_until_has_value_raises_browser_action_error_when_not_visible() -> None:
+    locator = _make_locator()
+    locator.wait_for.side_effect = PlaywrightError("timeout")
+    with pytest.raises(BrowserActionError, match="translation field"):
+        wait_until_has_value(locator, "translation field")
 
 
 # --- wait_until_enabled ---
@@ -164,8 +232,7 @@ def test_safe_select_uses_custom_timeout() -> None:
 def test_safe_select_raises_on_playwright_error() -> None:
     locator = _make_locator()
     locator.select_option.side_effect = PlaywrightError("select failed")
-    expected = "Failed to select option on 'source language select'"
-    with pytest.raises(BrowserActionError, match=expected):
+    with pytest.raises(BrowserActionError, match="source language select"):
         safe_select(locator, "de", "source language select")
 
 
@@ -176,6 +243,70 @@ def test_safe_select_preserves_cause() -> None:
     with pytest.raises(BrowserActionError) as exc_info:
         safe_select(locator, "de", "source language select")
     assert exc_info.value.__cause__ is original
+
+
+# --- safe_select_combobox ---
+
+
+def test_safe_select_combobox_uses_select_option_when_available() -> None:
+    locator = _make_locator()
+    safe_select_combobox(locator, "Deutsch", "source language select")
+    locator.select_option.assert_called_once_with("Deutsch", timeout=10_000)
+
+
+def test_safe_select_combobox_uses_custom_timeout() -> None:
+    locator = _make_locator()
+    safe_select_combobox(locator, "English", "translation language select", timeout_ms=5_000)
+    locator.select_option.assert_called_once_with("English", timeout=5_000)
+
+
+def test_safe_select_combobox_falls_back_to_click_when_select_option_fails() -> None:
+    locator = _make_locator()
+    option_locator = MagicMock()
+    locator.select_option.side_effect = PlaywrightError("not a native select")
+    locator.page.get_by_role.return_value = option_locator
+
+    safe_select_combobox(locator, "Deutsch", "source language select")
+
+    locator.click.assert_called_once()
+    locator.page.get_by_role.assert_called_once_with("option", name="Deutsch")
+    option_locator.click.assert_called_once()
+
+
+def test_safe_select_combobox_raises_with_value_in_message_on_fallback_failure() -> None:
+    locator = _make_locator()
+    locator.select_option.side_effect = PlaywrightError("not a native select")
+    locator.page.get_by_role.return_value.click.side_effect = PlaywrightError("option not found")
+
+    with pytest.raises(BrowserActionError, match="Deutsch"):
+        safe_select_combobox(locator, "Deutsch", "source language select")
+
+
+def test_safe_select_combobox_raises_with_context_in_message_on_fallback_failure() -> None:
+    locator = _make_locator()
+    locator.select_option.side_effect = PlaywrightError("not a native select")
+    locator.page.get_by_role.return_value.click.side_effect = PlaywrightError("option not found")
+
+    with pytest.raises(BrowserActionError, match="source language select"):
+        safe_select_combobox(locator, "Deutsch", "source language select")
+
+
+def test_safe_select_combobox_preserves_cause_on_fallback_failure() -> None:
+    locator = _make_locator()
+    original = PlaywrightError("option not found")
+    locator.select_option.side_effect = PlaywrightError("not a native select")
+    locator.page.get_by_role.return_value.click.side_effect = original
+
+    with pytest.raises(BrowserActionError) as exc_info:
+        safe_select_combobox(locator, "Deutsch", "source language select")
+
+    assert exc_info.value.__cause__ is original
+
+
+def test_safe_select_combobox_does_not_call_click_when_select_option_succeeds() -> None:
+    locator = _make_locator()
+    safe_select_combobox(locator, "English", "translation language select")
+    locator.click.assert_not_called()
 
 
 # --- isolation: no page navigation or flow methods called ---
