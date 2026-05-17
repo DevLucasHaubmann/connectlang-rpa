@@ -14,3 +14,4 @@
 | 0.8 | Configurar ambiente Python com uv | ✅ Concluída |
 | 0.9 | Revisar e fortalecer .gitignore | ✅ Concluída |
 | 1.1 | Criar sistema de settings tipado (pydantic-settings) | ✅ Concluída |
+| 1.2 | Criar modelo de palavra (WordEntry) | ✅ Concluída |
