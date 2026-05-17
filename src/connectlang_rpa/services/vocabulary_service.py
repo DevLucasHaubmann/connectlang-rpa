@@ -80,16 +80,11 @@ class VocabularyService:
         )
 
     def fill_word_entry(self, word_entry: WordEntry) -> None:
+        # "Wort" is the default type — only switch when sentence is explicitly required.
         if word_entry.entry_type == "sentence":
             safe_click(
                 self._locators.sentence_type_option,
                 context="sentence type option",
-                timeout_ms=self._settings.default_timeout_ms,
-            )
-        else:
-            safe_click(
-                self._locators.word_type_option,
-                context="word type option",
                 timeout_ms=self._settings.default_timeout_ms,
             )
 

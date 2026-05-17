@@ -77,12 +77,10 @@ class TestOpenNewWordForm:
 
 
 class TestFillWordEntry:
-    def test_word_type_clicks_word_option_and_fills_text(self) -> None:
+    def test_word_type_skips_type_click_and_fills_text(self) -> None:
         service, _page, settings = _make_service()
-        word_locator = MagicMock()
         input_locator = MagicMock()
         service._locators = MagicMock()
-        service._locators.word_type_option = word_locator
         service._locators.word_input = input_locator
 
         entry = WordEntry(text="Haus", entry_type="word")
@@ -93,11 +91,7 @@ class TestFillWordEntry:
         ):
             service.fill_word_entry(entry)
 
-        mock_click.assert_called_once_with(
-            word_locator,
-            context="word type option",
-            timeout_ms=settings.default_timeout_ms,
-        )
+        mock_click.assert_not_called()
         mock_fill.assert_called_once_with(
             input_locator,
             "Haus",
