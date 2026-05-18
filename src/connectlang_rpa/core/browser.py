@@ -40,6 +40,7 @@ class BrowserManager:
             )
             self._context.set_default_timeout(self._settings.default_timeout_ms)
             self._page = self._context.pages[0] if self._context.pages else self._context.new_page()
+            self._page.set_viewport_size({"width": 1280, "height": self._settings.viewport_height})
         except Exception:
             self._stop_playwright()
             raise

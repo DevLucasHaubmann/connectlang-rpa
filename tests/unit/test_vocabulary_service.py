@@ -18,6 +18,7 @@ def _make_settings(
     word_language: str = "de",
     translation_language: str = "en",
     debug_pause_before_submit: bool = False,
+    submit_click_strategy: str = "locator",
 ) -> MagicMock:
     settings = MagicMock()
     settings.target_url = target_url
@@ -25,6 +26,7 @@ def _make_settings(
     settings.word_language = word_language
     settings.translation_language = translation_language
     settings.debug_pause_before_submit = debug_pause_before_submit
+    settings.submit_click_strategy = submit_click_strategy
     return settings
 
 
@@ -431,7 +433,7 @@ class TestSubmitWord:
             timeout_ms=settings.default_timeout_ms,
         )
 
-    def test_calls_safe_click_on_submit_button(self) -> None:
+    def test_calls_safe_click_on_submit_button_with_locator_strategy(self) -> None:
         service, _page, settings = _make_service()
         submit_locator = MagicMock()
         service._locators = MagicMock()
@@ -600,6 +602,86 @@ class TestSubmitWord:
             service.submit_word("Rechnung")
 
         assert exc_info.value is original
+
+    def test_debug_mode_skips_automatic_click_and_calls_wait_for_completion(self) -> None:
+        page = _make_page()
+        settings = _make_settings(debug_pause_before_submit=True)
+        service = VocabularyService(page, settings)
+        service._locators = MagicMock()
+        service.wait_for_submission_completion = MagicMock()
+
+        with (
+            patch("connectlang_rpa.services.vocabulary_service.wait_until_has_value"),
+            patch("connectlang_rpa.services.vocabulary_service.safe_click") as mock_click,
+            structlog.testing.capture_logs() as logs,
+        ):
+            service.submit_word("Rechnung")
+
+        mock_click.assert_not_called()
+        page.pause.assert_called_once()
+        service.wait_for_submission_completion.assert_called_once()
+        assert any(e.get("event") == "debug_pause_before_submit" for e in logs)
+        assert any(e.get("event") == "debug_pause_resumed" for e in logs)
+
+    def test_locator_after_scroll_strategy_scrolls_before_click(self) -> None:
+        page = _make_page()
+        settings = _make_settings(submit_click_strategy="locator_after_scroll")
+        service = VocabularyService(page, settings)
+        btn_first = MagicMock()
+        service._locators = MagicMock()
+        service._locators.submit_button.first = btn_first
+        service.wait_for_submission_completion = MagicMock()
+
+        with (
+            patch("connectlang_rpa.services.vocabulary_service.wait_until_has_value"),
+            patch("connectlang_rpa.services.vocabulary_service.safe_click"),
+        ):
+            service.submit_word("Rechnung")
+
+        btn_first.scroll_into_view_if_needed.assert_called()
+
+    def test_keyboard_space_strategy_focuses_and_presses_space(self) -> None:
+        page = _make_page()
+        settings = _make_settings(submit_click_strategy="keyboard_space")
+        service = VocabularyService(page, settings)
+        btn_first = MagicMock()
+        service._locators = MagicMock()
+        service._locators.submit_button.first = btn_first
+        service.wait_for_submission_completion = MagicMock()
+
+        with patch("connectlang_rpa.services.vocabulary_service.wait_until_has_value"):
+            service.submit_word("Rechnung")
+
+        btn_first.focus.assert_called_once()
+        page.keyboard.press.assert_called_once_with("Space")
+
+    def test_keyboard_enter_strategy_focuses_and_presses_enter(self) -> None:
+        page = _make_page()
+        settings = _make_settings(submit_click_strategy="keyboard_enter")
+        service = VocabularyService(page, settings)
+        btn_first = MagicMock()
+        service._locators = MagicMock()
+        service._locators.submit_button.first = btn_first
+        service.wait_for_submission_completion = MagicMock()
+
+        with patch("connectlang_rpa.services.vocabulary_service.wait_until_has_value"):
+            service.submit_word("Rechnung")
+
+        btn_first.focus.assert_called_once()
+        page.keyboard.press.assert_called_once_with("Enter")
+
+    def test_unknown_strategy_raises_browser_action_error(self) -> None:
+        page = _make_page()
+        settings = _make_settings(submit_click_strategy="invalid")
+        service = VocabularyService(page, settings)
+        service._locators = MagicMock()
+        service.wait_for_submission_completion = MagicMock()
+
+        with (
+            patch("connectlang_rpa.services.vocabulary_service.wait_until_has_value"),
+            pytest.raises(BrowserActionError, match="Unknown submit_click_strategy"),
+        ):
+            service.submit_word("Rechnung")
 
 
 class TestAddWord:

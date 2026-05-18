@@ -13,6 +13,7 @@ def _make_settings(tmp_path: Path) -> MagicMock:
     settings.browser_profile_dir = tmp_path / "profile"
     settings.headless = True
     settings.default_timeout_ms = 10_000
+    settings.viewport_height = 1300
     return settings
 
 

@@ -281,10 +281,10 @@ class VocabularyService:
     def _log_button_hit_test(self, word_text: str) -> None:
         """Report which DOM element is at the submit button's visual center.
 
-        Uses document.elementFromPoint(centerX, centerY) to detect whether an
-        overlay, wrapper, or child element intercepts the click before it reaches
-        the button's own event handler. Logs whether the element found is the
-        button itself, a descendant of it, or an unrelated element.
+        Does NOT scroll — the hit-test is read-only diagnostics. Scrolling before
+        elementFromPoint was found to close the modal via the platform's scroll
+        listener. Logs viewport size and whether the computed center falls within
+        it to explain a null elementFromPoint result.
         """
         try:
             btn = self._locators.submit_button.first
@@ -294,6 +294,10 @@ class VocabularyService:
                 return
             cx = bbox["x"] + bbox["width"] / 2
             cy = bbox["y"] + bbox["height"] / 2
+            viewport = self._page.viewport_size
+            vw = viewport["width"] if viewport else None
+            vh = viewport["height"] if viewport else None
+            in_viewport = vw is not None and vh is not None and 0 <= cx <= vw and 0 <= cy <= vh
             result: dict[str, Any] | None = self._page.evaluate(
                 """([x, y]) => {
                     const el = document.elementFromPoint(x, y);
@@ -310,15 +314,83 @@ class VocabularyService:
                 }""",
                 [cx, cy],
             )
+            if result is None and not in_viewport:
+                log.warning(
+                    "submit_button_hittest_center_out_of_viewport",
+                    word=word_text,
+                    center_x=cx,
+                    center_y=cy,
+                    viewport_width=vw,
+                    viewport_height=vh,
+                )
             log.info(
                 "submit_button_hittest",
                 word=word_text,
                 center_x=cx,
                 center_y=cy,
+                viewport_width=vw,
+                viewport_height=vh,
+                center_in_viewport=in_viewport,
                 element_at_point=result,
             )
         except Exception as exc:
             log.warning("submit_button_hittest_error", word=word_text, error=str(exc))
+
+    def _execute_submit_click(self, word_text: str) -> None:
+        """Execute the submit click using the configured strategy.
+
+        Strategy is controlled by SUBMIT_CLICK_STRATEGY env var (default: locator).
+        All strategies are instrumented equally — network capture and persistence
+        verification run after regardless of which strategy is used.
+        """
+        strategy = self._settings.submit_click_strategy
+        btn = self._locators.submit_button
+        log.info("submit_click_strategy", word=word_text, strategy=strategy)
+
+        timeout = self._settings.default_timeout_ms
+        if strategy == "locator":
+            safe_click(btn, context="submit word button", timeout_ms=timeout)
+        elif strategy == "locator_after_scroll":
+            btn.first.scroll_into_view_if_needed()
+            safe_click(btn, context="submit word button", timeout_ms=timeout)
+        elif strategy == "locator_position":
+            bbox = btn.first.bounding_box()
+            if not bbox:
+                raise BrowserActionError(
+                    "submit button has no bounding box for locator_position strategy"
+                )
+            btn.first.click(position={"x": bbox["width"] / 2, "y": bbox["height"] / 2})
+        elif strategy == "mouse_center":
+            btn.first.scroll_into_view_if_needed()
+            bbox = btn.first.bounding_box()
+            if not bbox:
+                raise BrowserActionError(
+                    "submit button has no bounding box for mouse_center strategy"
+                )
+            cx = bbox["x"] + bbox["width"] / 2
+            cy = bbox["y"] + bbox["height"] / 2
+            self._page.mouse.click(cx, cy)
+        elif strategy == "keyboard_space":
+            btn.first.focus()
+            self._page.keyboard.press("Space")
+        elif strategy == "keyboard_enter":
+            btn.first.focus()
+            self._page.keyboard.press("Enter")
+        elif strategy == "js_click":
+            btn.first.evaluate("el => el.click()")
+        elif strategy == "mouse_center_no_scroll":
+            bbox = btn.first.bounding_box()
+            if not bbox:
+                raise BrowserActionError(
+                    "submit button has no bounding box for mouse_center_no_scroll strategy"
+                )
+            cx = bbox["x"] + bbox["width"] / 2
+            cy = bbox["y"] + bbox["height"] / 2
+            self._page.mouse.click(cx, cy)
+        else:
+            raise BrowserActionError(f"Unknown submit_click_strategy: {strategy!r}")
+
+        log.info("word_submit_clicked", word=word_text, strategy=strategy)
 
     def _blur_active_field(self) -> None:
         """Click the page body to blur any focused input before submitting.
@@ -382,8 +454,10 @@ class VocabularyService:
     ) -> None:
         """Wait for the submit operation to produce a mutating network request.
 
-        Waits for the form to close (submit button hidden) as the UI signal,
-        then validates that at least one mutating HTTP request was captured.
+        Waits for the form to close (submit button hidden) as the UI signal.
+        After the form closes, waits an additional grace period for in-flight
+        responses — platforms with optimistic UI close the modal before the
+        server response arrives.
         Logs all requests (including GET/fetch/XHR) for diagnostic purposes.
 
         Raises BrowserActionError if the form closes with no mutating request,
@@ -394,6 +468,7 @@ class VocabularyService:
             context="submit button after word submission",
             timeout_ms=self._settings.default_timeout_ms,
         )
+        self._page.wait_for_timeout(3_000)
 
         log.info(
             "submit_all_requests_captured",
@@ -437,7 +512,6 @@ class VocabularyService:
         self._blur_active_field()
         self._log_form_state_before_submit(word_text)
         self._log_submit_button_details(word_text)
-        self._log_button_hit_test(word_text)
 
         all_requests: list[dict[str, Any]] = []
         mutating_requests: list[dict[str, Any]] = []
@@ -475,23 +549,24 @@ class VocabularyService:
         self._page.on("console", _on_console)
         self._page.on("pageerror", _on_page_error)
         try:
+            self._log_button_hit_test(word_text)
             if self._settings.debug_pause_before_submit:
                 log.info(
                     "debug_pause_before_submit",
                     word=word_text,
                     detail=(
-                        "Pausing before submit click — click 'Zu meinen Wörtern hinzufügen' "
-                        "manually in the browser to test form state validity"
+                        "Pausing before submit — click 'Zu meinen Wörtern hinzufügen' manually. "
+                        "Network capture is active. Resume (▶) when done."
                     ),
                 )
                 self._page.pause()
-
-            safe_click(
-                self._locators.submit_button,
-                context="submit word button",
-                timeout_ms=self._settings.default_timeout_ms,
-            )
-            log.info("word_submit_clicked", word=word_text)
+                log.info(
+                    "debug_pause_resumed",
+                    word=word_text,
+                    detail="Resumed after manual interaction. Skipping automatic click.",
+                )
+            else:
+                self._execute_submit_click(word_text)
             self.wait_for_submission_completion(mutating_requests, all_requests, word_text)
         finally:
             self._page.remove_listener("response", _on_response)
