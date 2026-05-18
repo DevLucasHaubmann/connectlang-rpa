@@ -17,6 +17,26 @@ class Settings(BaseSettings):
     batch_size: int
     word_language: str
     translation_language: str
+    debug_pause_before_submit: bool = False
+    submit_click_strategy: str = "locator"
+    viewport_height: int = 1300
+
+    @field_validator("submit_click_strategy")
+    @classmethod
+    def must_be_valid_strategy(cls, value: str) -> str:
+        valid = {
+            "locator",
+            "locator_after_scroll",
+            "locator_position",
+            "mouse_center",
+            "keyboard_space",
+            "keyboard_enter",
+            "js_click",
+            "mouse_center_no_scroll",
+        }
+        if value not in valid:
+            raise ValueError(f"must be one of {sorted(valid)}")
+        return value
 
     @field_validator("target_url", "word_language", "translation_language")
     @classmethod

@@ -17,9 +17,9 @@ def _streamer(
     progress: list[tuple[int, int]] | None = None,
 ) -> LogStreamer:
     return LogStreamer(
-        on_line=lambda line: (lines.append(line) if lines is not None else None),
-        on_word_update=lambda w: (words.append(w) if words is not None else None),
-        on_progress=lambda c, t: (progress.append((c, t)) if progress is not None else None),
+        on_line=lambda line: lines.append(line) if lines is not None else None,
+        on_word_update=lambda w: words.append(w) if words is not None else None,
+        on_progress=lambda c, t: progress.append((c, t)) if progress is not None else None,
     )
 
 

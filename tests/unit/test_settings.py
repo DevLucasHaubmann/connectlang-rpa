@@ -15,6 +15,9 @@ _VALID_ENV: dict[str, str] = {
     "BATCH_SIZE": "10",
     "WORD_LANGUAGE": "de",
     "TRANSLATION_LANGUAGE": "en",
+    "DEBUG_PAUSE_BEFORE_SUBMIT": "false",
+    "SUBMIT_CLICK_STRATEGY": "locator",
+    "VIEWPORT_HEIGHT": "1300",
 }
 
 
@@ -50,6 +53,41 @@ class TestSettingsValid:
     def test_action_delay_zero_is_valid(self) -> None:
         s = _make_settings({"ACTION_DELAY_MS": "0"})
         assert s.action_delay_ms == 0
+
+    def test_debug_pause_before_submit_defaults_to_false(self) -> None:
+        s = _make_settings()
+        assert s.debug_pause_before_submit is False
+
+    def test_debug_pause_before_submit_can_be_enabled(self) -> None:
+        s = _make_settings({"DEBUG_PAUSE_BEFORE_SUBMIT": "true"})
+        assert s.debug_pause_before_submit is True
+
+    def test_submit_click_strategy_defaults_to_locator(self) -> None:
+        s = _make_settings()
+        assert s.submit_click_strategy == "locator"
+
+    def test_submit_click_strategy_accepts_all_valid_values(self) -> None:
+        valid = [
+            "locator",
+            "locator_after_scroll",
+            "locator_position",
+            "mouse_center",
+            "keyboard_space",
+            "keyboard_enter",
+            "js_click",
+            "mouse_center_no_scroll",
+        ]
+        for strategy in valid:
+            s = _make_settings({"SUBMIT_CLICK_STRATEGY": strategy})
+            assert s.submit_click_strategy == strategy
+
+    def test_submit_click_strategy_rejects_unknown_value(self) -> None:
+        with pytest.raises(ValidationError, match="must be one of"):
+            _make_settings({"SUBMIT_CLICK_STRATEGY": "invalid_strategy"})
+
+    def test_viewport_height_defaults_to_1300(self) -> None:
+        s = _make_settings()
+        assert s.viewport_height == 1300
 
 
 class TestSettingsValidation:

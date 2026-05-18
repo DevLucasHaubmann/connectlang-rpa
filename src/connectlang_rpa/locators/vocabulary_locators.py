@@ -7,6 +7,7 @@ _AI_FILL_BUTTON = "Mit KI ausfüllen"
 _SUBMIT_BUTTON = "Zu meinen Wörtern hinzufügen"
 _WORD_OPTION = "Wort"
 _SENTENCE_OPTION = "Satz"
+_WORD_SEARCH_PLACEHOLDER = "Wort suchen..."
 
 # The "Wort hinzufügen" form renders exactly two native <select> elements.
 # get_by_label("SPRACHE") is prohibited here: it resolves to the global
@@ -66,3 +67,15 @@ class VocabularyLocators:
     @property
     def submit_button(self) -> Locator:
         return self._page.get_by_role("button", name=_SUBMIT_BUTTON)
+
+    @property
+    def word_search_input(self) -> Locator:
+        return self._page.get_by_placeholder(_WORD_SEARCH_PLACEHOLDER)
+
+    def word_in_list(self, word_text: str) -> Locator:
+        """Return a locator for the word entry in the vocabulary list.
+
+        Uses partial match because the platform prepends articles (e.g. "die Rechnung",
+        "der Fahrplan"), so an exact search for the bare stem would never resolve.
+        """
+        return self._page.get_by_text(word_text, exact=False)
